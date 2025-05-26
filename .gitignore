@@ -11,3 +11,9 @@
 
 pkg/
 src/
+
+*/nas_credentials
+*/.local/nas_credentials
+*/.ssh/*
+
+main/system_variables.sh
