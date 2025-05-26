@@ -8,6 +8,7 @@ A Collection of Functions to Setup Linux (Tested for Arch Linux)
     - [Setting Variables](#setting-variables)
     - [Running the Main Setup](#main-setup)
 - [Scripts](#scripts)
+- [Available Functions](#available-functions)
 - [Dependencies](#dependencies)
 - [Contributing](#contributing)
 - [License](#license)
@@ -20,9 +21,8 @@ To get started with Open-Linux-Setup:
 
 1. **Clone the repository:**
    ```bash
-   git clone YOUR_REPOSITORY_URL_HERE
+   git clone https://github.com/Firstp1ck/Open-Linux-Setup.git
    ```
-   (Please replace `YOUR_REPOSITORY_URL_HERE` with the actual URL of your repository.)
 2. **Navigate to the directory:**
    ```bash
    cd Open-Linux-Setup
@@ -67,6 +67,63 @@ This repository includes several scripts to assist with your Linux setup. Here's
 -   `Start_server_status.sh`: This script checks and reports the status of a server setup with Nginx/Docker and other services to add.
 -   `Start_user_editor.sh`: This script is used to set up and manage users.
 -   `Start_network_check.sh`: This script performs various network connectivity or configuration checks.
+
+## Available Functions
+
+Functions in the `Start_System_setup.sh` Script
+
+### Update Functions
+
+- `update_eos_mirrors`: Update EndeavourOS mirrors
+- `update_arch_mirrors`: Update Arch Linux mirrors
+- `update_pacman`: Update pacman packages
+- `update_yay`: Update AUR packages
+- `update_debian`: Update Debian packages
+- `update_fedora`: Update Fedora packages
+- `update_firmware`: Check and install firmware updates
+- `remove_cache`: Remove pacman cache
+
+### Install Functions
+- `install_packages`: Install pacman and AUR packages
+- `install_drivers`: Install graphics drivers
+
+### Debug Functions
+
+- `Debug_ntfs_drives`: Fix and mount NTFS USB drives
+
+### Configuration Functions
+
+- `configure_drives`: Mounts unmounted drives not yet added to fstab
+- `configure_pacman_color`: Ensure pacman Color and ILoveCandy are set
+- `configure_fish`: Set fish as default shell and add fzf as file management
+- `configure_bluetooth`: Setup Bluetooth
+- `configure_ssh`: Configure SSH keys and connection
+- `configure_git`: Setup Git configuration
+- `configure_environment`: Set up environment variables for Librewolf and Neovim
+- `configure_dotfiles`: Setup dotfiles
+- `configure_virtual_env`: Setup Virtual Machines
+- `configure_ollama`: Configure Ollama AI
+- `configure_razer`: Setup Open-Razer
+- `configure_input_remapper`: Setup Input-Remapper
+- `configure_fingerprint`: Setup fingerprint reader
+- `configure_grub`: Configure GRUB bootloader
+- `configure_timeshift`: Setup Timeshift backups
+- `configure_grub_btrfsd`: Configure GRUB BTRFS
+- `configure_network_manager`: Configure NetworkManager
+- `configure_wifi`: Configure WiFi settings
+- `configure_rust`: Configure Rust, if installed
+- `configure_gnome_keyring`: Setup GNOME Keyring
+- `configure_filepicker`: Configure file picker
+- `configure_monitor`: Configure monitor settings
+- `configure_onedrive`: Setup OneDrive
+- `configure_onedrive_rclone`: Setup OneDrive (rclone)
+- `sync_arch_to_nas`: Sync Arch to NAS
+- `configure_nas_sync`: Setup NAS Sync for Onedrive
+- `configure_wallpaper_path`: Configure wallpaper path
+- `configure_hyprlock_wallpaper`: Configure Hyprlock wallpaper
+- `configure_notification`: Configure Dunst Notification Daemon
+- `configure_waydroid`: Configure Waydroid
+- `configure_torbrowser`: Configure Tor Network/Browser
 
 ## Dependencies
 This setup may depend on or integrate with other projects. A notable dependency is:
