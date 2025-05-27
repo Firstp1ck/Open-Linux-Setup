@@ -599,6 +599,7 @@ show_menu() {
     echo "  a) All applicable steps"
     echo "  e) All steps with exceptions"
     echo "  d) Default (run all without interaction)"
+    echo "  m) Select multiple steps by number (e.g., 1 5 7)"
     echo "  q) Quit"
 }
 
@@ -812,6 +813,55 @@ get_user_choices() {
                 if run_default; then
                     break
                 fi
+                ;;
+            m) # Handle multiple selection by number
+                local selected_indices=()
+                SELECTED_STEPS=() # Clear previous selection
+
+                echo -e "\n${YELLOW}Enter step numbers to INCLUDE (space-separated, e.g., 1 5 7):${NC}"
+                local i=1
+                for ((i=0; i<${#FILTERED_FUNCTIONS[@]}; i++)); do
+                    echo "  $((i+1))) ${FILTERED_DESCRIPTIONS[$i]}"
+                done
+                read -rp "> " choices_list
+
+                read -ra selected_indices <<< "$choices_list"
+                local valid=true
+                for index_str in "${selected_indices[@]}"; do
+                    if [[ "$index_str" =~ ^[0-9]+$ ]]; then
+                        local index=$((index_str-1))
+                        if [ "$index" -ge 0 ] && [ "$index" -lt "${#FILTERED_FUNCTIONS[@]}" ]; then
+                            SELECTED_STEPS+=("${FILTERED_FUNCTIONS[$index]}")
+                        else
+                            print_warning "Invalid step number: $index_str. Skipping."
+                            valid=false
+                        fi
+                    else
+                        print_warning "Invalid input: '$index_str'. Skipping."
+                        valid=false
+                    fi
+                done
+
+                if [ ${#SELECTED_STEPS[@]} -eq 0 ]; then
+                    print_warning "No valid steps selected. Returning to menu."
+                    continue # Go back to the main menu
+                fi
+
+                echo -e "\n${GREEN}You have selected:${NC}"
+                for step in "${SELECTED_STEPS[@]}"; do
+                    for i in "${!FILTERED_FUNCTIONS[@]}"; do
+                        if [[ "${FILTERED_FUNCTIONS[$i]}" = "$step" ]]; then
+                            echo "  - ${FILTERED_DESCRIPTIONS[$i]}"
+                            break
+                        fi
+                    done
+                done
+                echo
+                if ! prompt_yes_no "Proceed with selected steps?"; then
+                    echo "Aborted."
+                    handle_error
+                fi
+                break # Exit the while loop after processing multiple choices
                 ;;
             q)
                 echo "Exiting."
