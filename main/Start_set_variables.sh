@@ -12,6 +12,7 @@ DEFAULT_PICTURE_DIR="Bilder"
 DEFAULT_DOWNLOADS_DIR="Downloads"
 DEFAULT_NAS_PORT="9222"
 DEFAULT_ONEDRIVE_SYNC_DIR="$HOME/Onedrive"
+DEFAULT_TIMEZONE="Europe/Zurich"
 
 # Define default output file path
 DEFAULT_OUTPUT_FILE="./system_variables.sh"
@@ -27,6 +28,10 @@ fi
 
 # Prompt for each variable or use defaults
 if [ "$USE_DEFAULTS" == false ]; then
+
+    read -rp "Enter your Timezone (default: $DEFAULT_TIMEZONE): " TIMEZONE
+    TIMEZONE=${TIMEZONE:-$DEFAULT_TIMEZONE} # Use default if input is empty
+
     read -rp "Enter the mount point for your SSD/NVMe (e.g., /mnt/SSD_NVME_4TB): " SSD_MNT
     read -rp "Enter your Documents directory name (default: $DEFAULT_DOCUMENTS_DIR): " DOCUMENTS_DIR
     DOCUMENTS_DIR=${DOCUMENTS_DIR:-$DEFAULT_DOCUMENTS_DIR} # Use default if input is empty
@@ -84,6 +89,7 @@ else
     NAS_USER=""
     NAS_DEST=""
     ONEDRIVE_SYNC_DIR="$DEFAULT_ONEDRIVE_SYNC_DIR"
+    TIMEZONE=$DEFAULT_TIMEZONE
 
     # Use the default output file path
     OUTPUT_FILE="$DEFAULT_OUTPUT_FILE"
@@ -137,6 +143,7 @@ echo "ONEDRIVE_SYNC_DIR=\"$ONEDRIVE_SYNC_DIR\""
 echo "ONEDRIVE_CONFIG_DIR=\"$ONEDRIVE_CONFIG_DIR\"" # Derived
 echo "ONEDRIVE_SOURCE=\"$ONEDRIVE_SOURCE\"" # Derived based on SSD_MNT
 echo "RCLONE_ONEDRIVE_DIR=\"$RCLONE_ONEDRIVE_DIR\"" # Derived based on SSD_MNT
+echo "TIMEZONE=\"$TIMEZONE\""
 } > "$OUTPUT_FILE"
 
 echo ""

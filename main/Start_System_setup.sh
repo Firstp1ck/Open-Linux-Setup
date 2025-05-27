@@ -1360,12 +1360,7 @@ check_directories() {
 
 check_time_settings() {
     # Function to check and set time settings
-    # Parameters:
-    #   $1 (optional): Timezone to set (default: Europe/Zurich)
-    #   $2 (optional): Set to "no-hwclock-sync" to skip hardware clock sync
-    local timezone="${1:-Europe/Zurich}"
-    local skip_hwclock_sync="${2:-}"
-    local timezone_file="/usr/share/zoneinfo/$timezone"
+    local timezone_file="/usr/share/zoneinfo/$TIMEZONE"
     local localtime_link="/etc/localtime"
     local ntp_enabled
     local timezone_set=false
@@ -1373,18 +1368,18 @@ check_time_settings() {
 
     # Check if timezone file exists
     if [ ! -e "$timezone_file" ]; then
-        handle_error "Timezone file $timezone_file does not exist. Please provide a valid timezone. $timezone"
+        handle_error "Timezone file $timezone_file does not exist. Please provide a valid timezone. $TIMEZONE"
     fi
 
-    print_verbose "Checking and setting timezone to $timezone..."
+    print_verbose "Checking and setting timezone to $TIMEZONE..."
     if [ ! -e "$localtime_link" ] || ! cmp -s "$localtime_link" "$timezone_file"; then
-        if execute_command "sudo ln -sf $timezone_file $localtime_link" "Set timezone to $timezone"; then
+        if execute_command "sudo ln -sf $timezone_file $localtime_link" "Set timezone to $TIMEZONE"; then
             timezone_set=true
         else
-            handle_error "Could not set timezone to $timezone"
+            handle_error "Could not set timezone to $TIMEZONE"
         fi
     else
-        print_verbose "Timezone already set to $timezone."
+        print_verbose "Timezone already set to $TIMEZONE."
     fi
 
     print_verbose "Checking NTP status..."
@@ -1399,7 +1394,7 @@ check_time_settings() {
         print_verbose "NTP is already enabled."
     fi
 
-    if [ "$skip_hwclock_sync" != "no-hwclock-sync" ] && ($timezone_set || $ntp_was_set); then
+    if ($timezone_set || $ntp_was_set); then
         print_verbose "Syncing hardware clock to system time..."
         if ! execute_command "sudo hwclock --systohc" "Sync hardware clock to system time"; then
             handle_error "Could not synchronize hardware clock with system time"
