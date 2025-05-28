@@ -131,7 +131,7 @@ echo ""
 
 # 7. Check Fragmentation Issues with Ping
 echo_info "7. Checking for fragmentation issues using ping (pinging 8.8.8.8 with packet size 1472)..."
-ping_test=$(ping -c 4 -M do -s 1472 8.8.8.8 2>/dev/null)
+ping_test=$(ping -c 4 -M do\; -s 1472 8.8.8.8 2>/dev/null)
 if [ $? -eq 0 ]; then
     echo_success "No fragmentation issues detected."
     echo "$ping_test"
