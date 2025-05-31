@@ -1,7 +1,7 @@
 #!/bin/bash
 
 echo "$HOME/ * /Open-Linux-Setup"
-read -p "Enter the full path to system_variables.sh or just the directory replacing *: " user_input
+read -rp "Enter the full path to system_variables.sh or just the directory replacing *: " user_input
 
 if [[ "$user_input" == /* ]] || [[ "$user_input" == $HOME/* ]]; then
     full_path="$user_input"
@@ -16,6 +16,7 @@ if [ ! -f "$full_path" ]; then
     exit 1
 fi
 
+# shellcheck disable=SC1090
 source "$full_path"
 
 connect_ssh() {
