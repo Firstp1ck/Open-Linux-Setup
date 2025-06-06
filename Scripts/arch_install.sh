@@ -14,16 +14,26 @@ print_section() {
 # Function to prompt user and wait for confirmation
 prompt_continue() {
     echo -e "${YELLOW}$1${NC}"
-    read -p "Press Enter to continue..."
+    read -rp "Press Enter to continue..."
 }
 
 # Function to execute command and check status
 execute_command() {
-    echo -e "${YELLOW}Executing: $1${NC}"
-    eval "$1"
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}Command failed. Please check the error and try again.${NC}"
-        exit 1
+    echo -e "${YELLOW}Command to execute: $1${NC}"
+    read -rp "Do you want to execute this command? (y/N): " confirm
+    if [[ $confirm =~ ^[Yy]$ ]]; then
+        eval "$1"
+        if [ $? -ne 0 ]; then
+            echo -e "${RED}Command failed. Please check the error and try again.${NC}"
+            exit 1
+        fi
+    else
+        echo -e "${RED}Command skipped.${NC}"
+        read -rp "Do you want to continue with the installation? (y/N): " continue_install
+        if [[ ! $continue_install =~ ^[Yy]$ ]]; then
+            echo -e "${RED}Installation aborted by user.${NC}"
+            exit 1
+        fi
     fi
 }
 
@@ -32,7 +42,7 @@ print_section "Initial Setup"
 
 echo "Available keyboard layouts:"
 execute_command "localectl list-keymaps"
-read -p "Enter your keyboard layout (e.g., de_CH-latin1): " keyboard_layout
+read -rp "Enter your keyboard layout (e.g., de_CH-latin1): " keyboard_layout
 execute_command "loadkeys $keyboard_layout"
 
 prompt_continue "Verifying system time..."
@@ -50,12 +60,17 @@ execute_command "fdisk -l"
 # Disk Partitioning
 print_section "Disk Partitioning"
 
-read -p "Enter the disk to partition (e.g., /dev/vda): " disk
+read -rp "Enter the disk to partition (e.g., /dev/vda): " disk
 prompt_continue "Starting disk partitioning. You will need to manually create partitions using fdisk."
 echo "Recommended partition layout:"
-echo "1. EFI System Partition (1GB)"
-echo "2. Swap Partition (4GB)"
-echo "3. Root Partition (remaining space)"
+echo "1. EFI System Partition (1GB) - Type: EFI System"
+echo "2. Swap Partition (4GB) - Type: Linux Swap"
+echo "3. Root Partition (remaining space) - Linux Filesystem"
+echo "Use the following commands:"
+echo "1. 'g' for creating a GPT Partitionstable"
+echo "2. 'n' to create new Partition each"
+echo "3. 't' to choose the File System Type"
+echo "4. 'w' save and exit fdisk"
 execute_command "fdisk $disk"
 
 prompt_continue "Verifying partition layout..."
@@ -64,9 +79,9 @@ execute_command "lsblk"
 # Filesystem Setup
 print_section "Filesystem Setup"
 
-read -p "Enter root partition (e.g., /dev/vda3): " root_partition
-read -p "Enter boot partition (e.g., /dev/vda1): " boot_partition
-read -p "Enter swap partition (e.g., /dev/vda2): " swap_partition
+read -rp "Enter root partition (e.g., /dev/vda3): " root_partition
+read -rp "Enter boot partition (e.g., /dev/vda1): " boot_partition
+read -rp "Enter swap partition (e.g., /dev/vda2): " swap_partition
 
 execute_command "mkfs.btrfs $root_partition"
 execute_command "mkfs.fat -F 32 $boot_partition"
@@ -95,7 +110,43 @@ execute_command "genfstab -U /mnt >> /mnt/etc/fstab"
 print_section "System Configuration"
 
 prompt_continue "Entering chroot environment..."
-execute_command "arch-chroot /mnt"
+arch-chroot /mnt /bin/bash << 'EOF'
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Function to print section headers
+print_section() {
+    echo -e "\n${GREEN}=== $1 ===${NC}\n"
+}
+
+# Function to prompt user and wait for confirmation
+prompt_continue() {
+    echo -e "${YELLOW}$1${NC}"
+    read -rp "Press Enter to continue..."
+}
+
+# Function to execute command and check status
+execute_command() {
+    echo -e "${YELLOW}Command to execute: $1${NC}"
+    read -rp "Do you want to execute this command? (y/N): " confirm
+    if [[ $confirm =~ ^[Yy]$ ]]; then
+        eval "$1"
+        if [ $? -ne 0 ]; then
+            echo -e "${RED}Command failed. Please check the error and try again.${NC}"
+            exit 1
+        fi
+    else
+        echo -e "${RED}Command skipped.${NC}"
+        read -rp "Do you want to continue with the installation? (y/N): " continue_install
+        if [[ ! $continue_install =~ ^[Yy]$ ]]; then
+            echo -e "${RED}Installation aborted by user.${NC}"
+            exit 1
+        fi
+    fi
+}
 
 read -p "Enter your timezone (e.g., Europe/Zurich): " timezone
 execute_command "ln -sf /usr/share/zoneinfo/$timezone /etc/localtime"
@@ -155,4 +206,10 @@ echo "4. Log in with your user account"
 echo "5. Start configuring your desktop environment"
 
 prompt_continue "Press Enter to exit chroot environment..."
-exit 
+EOF
+
+# Post-chroot cleanup
+print_section "Post-chroot Cleanup"
+prompt_continue "Unmounting all partitions..."
+execute_command "umount -R /mnt"
+prompt_continue "Installation complete! You can now reboot your system." 
