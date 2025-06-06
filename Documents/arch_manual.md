@@ -101,6 +101,10 @@ nvim /etc/locale.gen
     de_CH.UTF-8 UTF-8
     de_CH ISO-8859-1
 
+# Generate Locale
+locale-gen
+
+#Create Local Configuration
 nvim /etc/locale.conf
     LANG=de_CH.UTF-8
 
