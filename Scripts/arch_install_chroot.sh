@@ -80,47 +80,14 @@ execute_command "systemctl enable sddm"
 print_section "Hyprland Configuration"
 
 execute_command "mkdir -p /home/$username/.config/hypr"
-kb_layout=$(get_input "Enter keyboard layout" "ch")
-kb_variant=$(get_input "Enter keyboard variant" "de_nodeadkeys")
-
-# Check if config file exists
-if [ ! -f "/home/$username/.config/hypr/hyprland.conf" ]; then
-    # Create new config file
-    execute_command "cat > /home/$username/.config/hypr/hyprland.conf << 'EOF'
-input {
-    kb_layout = $kb_layout
-    kb_variant = $kb_variant
-    kb_model =
-    kb_options = caps:escape, shift:both_capslock, numpad:pc
-    kb_rules =
-    numlock_by_default = true
-
-    follow_mouse = 1
-
-    sensitivity = 0.0 # -1.0 - 1.0, 0 means no modification.
-
-    accel_profile = flat
-    force_no_accel = true
-    scroll_factor = 0.5
-
-    touchpad {
-        natural_scroll = false
-    }
-}
-EOF"
-else
-    # Update existing config file
-    execute_command "sed -i 's/^    kb_layout =.*/    kb_layout = $kb_layout/' /home/$username/.config/hypr/hyprland.conf"
-    execute_command "sed -i 's/^    kb_variant =.*/    kb_variant = $kb_variant/' /home/$username/.config/hypr/hyprland.conf"
-fi
-
+execute_command "cp /root/Open-Linux-Setup/System_files/hyprland.conf.bak /home/$username/.config/hypr/hyprland.conf"
 execute_command "chown -R $username:$username /home/$username/.config"
 
 # Final Steps
 print_section "Final Steps"
 echo -e "${GREEN}Chroot installation completed!${NC}"
 echo "Please follow these final steps:"
-echo "1. Exit chroot environment: type 'exit'"
+echo "1. Exit chroot environment: type 'exit' or Ctrl+D"
 echo "2. Reboot the system: reboot"
 echo "3. Log in with your user account"
 echo "4. Start configuring your desktop environment" 
