@@ -28,6 +28,7 @@ monitor=,preferred,auto,auto
 $terminal = kitty
 $fileManager = dolphin
 $menu = wofi --show drun
+$browser = firefox
 
 
 #################
@@ -37,9 +38,11 @@ $menu = wofi --show drun
 # Autostart necessary processes (like notifications daemons, status bars, etc.)
 # Or execute your favorite apps at launch like this:
 
-exec-once = $terminal
+exec-once = $terminal &
+exec-once = $fileManager &
+exec-once = $browser &
 exec-once = nm-applet &
-exec-once = waybar & hyprpaper & firefox
+exec-once = waybar & hyprpaper &
 
 
 #############################
@@ -284,3 +287,7 @@ windowrule = suppressevent maximize, class:.*
 
 # Fix some dragging issues with XWayland
 windowrule = nofocus,class:^$,title:^$,xwayland:1,floating:1,fullscreen:0,pinned:0
+
+windowrule = workspace 2 silent, class:firefox
+
+windowrule = workspace 3 silent, class:org.kde.dolphin
