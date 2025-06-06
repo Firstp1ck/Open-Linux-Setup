@@ -81,6 +81,8 @@ print_section "Hyprland Configuration"
 
 execute_command "mkdir -p /home/$username/.config/hypr"
 execute_command "cp /root/Open-Linux-Setup/System_files/hyprland.conf.bak /home/$username/.config/hypr/hyprland.conf"
+execute_command "mkdir -p /home/$username/.config/waybar"
+execute_command "cp -r /root/Open-Linux-Setup/System_files/waybar/* /home/$username/.config/waybar/"
 execute_command "chown -R $username:$username /home/$username/.config"
 
 # Final Steps

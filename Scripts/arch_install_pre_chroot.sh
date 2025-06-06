@@ -89,7 +89,7 @@ print_section "System Installation"
 
 execute_command "sed -i '/\[multilib\]/,/Include/s/^#//' /etc/pacman.conf"
 execute_command "pacman -Sy"
-execute_command "pacstrap -K /mnt base linux linux-firmware base-devel sudo pam grub efibootmgr curl git fish neovim man-db man-pages terminus-font networkmanager qemu-guest-agent sddm hyprland xdg-desktop-portal-hyprland xdg-user-dirs intel-ucode mesa vulkan-icd-loader sof-firmware lib32-mesa lib32-vulkan-icd-loader pipewire pipewire-pulse wireplumber kitty wofi falkon dolphin hyprpaper waybar firefox network-manager-applet polkit"
+execute_command "pacstrap -K /mnt base linux linux-firmware base-devel sudo pam grub efibootmgr curl git fish neovim man-db man-pages terminus-font networkmanager qemu-guest-agent sddm hyprland xdg-desktop-portal-hyprland xdg-user-dirs intel-ucode mesa vulkan-icd-loader sof-firmware lib32-mesa lib32-vulkan-icd-loader pipewire pipewire-pulse wireplumber kitty wofi falkon dolphin hyprpaper waybar otf-font-awesome pavucontrol power-profiles-daemon libappindicator-gtk3 python-psutil python-pydbus python-gobject firefox network-manager-applet polkit"
 execute_command "genfstab -U /mnt >> /mnt/etc/fstab"
 
 # Copy the chroot script to the new system
