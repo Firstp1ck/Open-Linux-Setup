@@ -94,6 +94,17 @@ execute_command "genfstab -U /mnt >> /mnt/etc/fstab"
 
 # Copy the chroot script to the new system
 print_section "Preparing for Chroot"
+
+# Get the directory where the script is located
+script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+current_dir="$(pwd)"
+
+# If we're not in the script directory, change to it
+if [ "$current_dir" != "$script_dir" ]; then
+    echo "Changing to script directory: $script_dir"
+    cd "$script_dir" || exit
+fi
+
 execute_command "cp arch_install_chroot.sh /mnt/root/"
 execute_command "chmod +x /mnt/root/arch_install_chroot.sh"
 
