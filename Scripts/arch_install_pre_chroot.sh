@@ -11,6 +11,15 @@ print_section() {
     echo -e "\n${GREEN}=== $1 ===${NC}\n"
 }
 
+# Function to get non-empty input
+get_input() {
+    local prompt="$1"
+    local default="$2"
+    local input
+    read -rp "$prompt [$default]: " input
+    echo "${input:-$default}"
+}
+
 # Function to execute command and check status
 execute_command() {
     echo -e "${YELLOW}Command to execute: $1${NC}"
@@ -31,7 +40,7 @@ print_section "Initial Setup"
 
 echo "Available keyboard layouts:"
 execute_command "localectl list-keymaps"
-read -rp "Enter your keyboard layout (e.g., de_CH-latin1): " keyboard_layout
+keyboard_layout=$(get_input "Enter your keyboard layout" "de_CH-latin1")
 execute_command "loadkeys $keyboard_layout"
 
 execute_command "timedatectl"
@@ -42,7 +51,7 @@ execute_command "fdisk -l"
 # Disk Partitioning
 print_section "Disk Partitioning"
 
-read -rp "Enter the disk to partition (e.g., /dev/vda): " disk
+disk=$(get_input "Enter the disk to partition" "/dev/vda")
 echo "Starting disk partitioning. You will need to manually create partitions using fdisk."
 echo "Recommended partition layout:"
 echo "1. EFI System Partition (1GB) - Type: EFI System"
@@ -51,7 +60,10 @@ echo "3. Root Partition (remaining space) - Linux Filesystem"
 echo "Use the following commands:"
 echo "1. 'g' for creating a GPT Partitionstable"
 echo "2. 'n' to create new Partition each"
+echo "2.a.  Use +1g (Boot) resp +4g (Swap) for 'Last Sector'"
 echo "3. 't' to choose the File System Type"
+echo "3.a.  Use '1' for EFI System (Boot)"
+echo "3.b.  Use '19' for Swap System (Swap)"
 echo "4. 'w' save and exit fdisk"
 execute_command "fdisk $disk"
 
@@ -60,9 +72,9 @@ execute_command "lsblk"
 # Filesystem Setup
 print_section "Filesystem Setup"
 
-read -rp "Enter root partition (e.g., /dev/vda3): " root_partition
-read -rp "Enter boot partition (e.g., /dev/vda1): " boot_partition
-read -rp "Enter swap partition (e.g., /dev/vda2): " swap_partition
+root_partition=$(get_input "Enter root partition" "/dev/vda3")
+boot_partition=$(get_input "Enter boot partition" "/dev/vda1")
+swap_partition=$(get_input "Enter swap partition" "/dev/vda2")
 
 execute_command "mkfs.btrfs $root_partition"
 execute_command "mkfs.fat -F 32 $boot_partition"

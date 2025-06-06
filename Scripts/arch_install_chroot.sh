@@ -26,11 +26,20 @@ execute_command() {
     fi
 }
 
+# Function to get non-empty input
+get_input() {
+    local prompt="$1"
+    local default="$2"
+    local input
+    read -rp "$prompt [$default]: " input
+    echo "${input:-$default}"
+}
+
 # System Configuration
 print_section "System Configuration"
 
-read -rp "Enter your keyboard layout (e.g., de_CH-latin1): " keyboard_layout
-read -rp "Enter your timezone (e.g., Europe/Zurich): " timezone
+keyboard_layout=$(get_input "Enter your keyboard layout" "de_CH-latin1")
+timezone=$(get_input "Enter your timezone" "Europe/Zurich")
 execute_command "ln -sf /usr/share/zoneinfo/$timezone /etc/localtime"
 execute_command "hwclock --systohc"
 
@@ -41,7 +50,7 @@ execute_command "echo 'LANG=de_CH.UTF-8' > /etc/locale.conf"
 
 execute_command "echo 'KEYMAP=$keyboard_layout' > /etc/vconsole.conf"
 
-read -rp "Enter hostname: " hostname
+hostname=$(get_input "Enter hostname" "archlinux")
 execute_command "echo $hostname > /etc/hostname"
 
 execute_command "systemctl enable NetworkManager"
@@ -58,7 +67,7 @@ execute_command "grub-mkconfig -o /boot/grub/grub.cfg"
 # User Setup
 print_section "User Setup"
 
-read -rp "Enter username: " username
+username=$(get_input "Enter username" "user")
 execute_command "useradd -m -G wheel -s /bin/bash $username"
 execute_command "passwd $username"
 
