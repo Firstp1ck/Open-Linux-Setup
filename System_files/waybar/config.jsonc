@@ -34,6 +34,11 @@
         "custom/power"
     ],
     // Modules configuration
+    "hyprland/language": {
+    "format": "{short}",
+    "format-ch": "CH",
+    "keyboard-name": "at-translated-set-2-keyboard"
+    },
     "hyprland/workspaces": {
         "disable-scroll": true,
         "all-outputs": true,
