@@ -214,7 +214,8 @@
 			"shutdown": "shutdown",
 			"reboot": "reboot",
 			"suspend": "systemctl suspend",
-			"hibernate": "systemctl hibernate"
+			"hibernate": "systemctl hibernate",
+            "logout": "hyprctl dispatch exit"
 		}
     }
 }
