@@ -105,10 +105,11 @@ if [ "$current_dir" != "$script_dir" ]; then
     cd "$script_dir" || exit
 fi
 
-execute_command "cp arch_install_chroot.sh /mnt/root/"
-execute_command "chmod +x /mnt/root/arch_install_chroot.sh"
+# Copy the entire repository to the new system
+execute_command "cp -r ../ /mnt/root/Open-Linux-Setup"
+execute_command "chmod +x /mnt/root/Open-Linux-Setup/Scripts/arch_install_chroot.sh"
 
 echo -e "${GREEN}Pre-chroot setup completed!${NC}"
 echo "Now you can enter the chroot environment and run the chroot script:"
 echo "1. arch-chroot /mnt"
-echo "2. /root/arch_install_chroot.sh" 
+echo "2. /root/Open-Linux-Setup/Scripts/arch_install_chroot.sh" 
