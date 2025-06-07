@@ -1,4 +1,5 @@
 #!/bin/bash
+# See Open-Linux-Setup/Documents/aur_package_manager.md for detailed Instructions and Importent Notes.
 
 # Check for required dependencies
 check_dependencies() {

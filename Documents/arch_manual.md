@@ -1,4 +1,4 @@
-# Arch Linux Installation Guide
+# Arch Linux Installation Guide - Basic Hyprland Setup
 
 ## Initial Setup
 ```bash
