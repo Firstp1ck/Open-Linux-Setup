@@ -38,13 +38,32 @@ get_input() {
 # System Configuration
 print_section "System Configuration"
 
+show_keyboard_layouts=$(get_input "Do you want to see a list of available keyboard layouts? (y/N)" "N")
+if [[ "$show_keyboard_layouts" =~ ^[Yy]$ ]]; then
+    execute_command "localectl list-keymaps"
+fi
 keyboard_layout=$(get_input "Enter your keyboard layout" "de_CH-latin1")
+
+show_timezones=$(get_input "Do you want to see a list of available timezones? (y/N)" "N")
+if [[ "$show_timezones" =~ ^[Yy]$ ]]; then
+    execute_command "timedatectl list-timezones"
+fi
 timezone=$(get_input "Enter your timezone" "Europe/Zurich")
 execute_command "ln -sf /usr/share/zoneinfo/$timezone /etc/localtime"
 execute_command "hwclock --systohc"
 
-execute_command "sed -i 's/#de_CH.UTF-8 UTF-8/de_CH.UTF-8 UTF-8/' /etc/locale.gen"
-execute_command "sed -i 's/#de_CH ISO-8859-1/de_CH ISO-8859-1/' /etc/locale.gen"
+show_locale_gen=$(get_input "Do you want to see the relevant lines from /etc/locale.gen? (y/N)" "N")
+if [[ "$show_locale_gen" =~ ^[Yy]$ ]]; then
+    execute_command "grep 'UTF-8' /etc/locale.gen | cat"
+fi
+locale_utf8=$(get_input "Enter your desired UTF-8 locale from the list above" "de_CH.UTF-8 UTF-8")
+
+if [[ "$show_locale_gen" =~ ^[Yy]$ ]]; then
+    execute_command "grep 'ISO-8859-1' /etc/locale.gen | cat"
+fi
+locale_iso=$(get_input "Enter your desired ISO-8859-1 locale from the list above" "de_CH ISO-8859-1")
+execute_command "sed -i \"s/#${locale_utf8}/${locale_utf8}/g\" /etc/locale.gen"
+execute_command "sed -i \"s/#${locale_iso}/${locale_iso}/g\" /etc/locale.gen"
 execute_command "locale-gen"
 execute_command "echo 'LANG=de_CH.UTF-8' > /etc/locale.conf"
 

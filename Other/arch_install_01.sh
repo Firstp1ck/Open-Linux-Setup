@@ -38,8 +38,12 @@ execute_command() {
 # Initial Setup
 print_section "Initial Setup"
 
-echo "Available keyboard layouts:"
-execute_command "localectl list-keymaps"
+read -rp "Do you want to see the list of keyboard layouts? (y/N): " show_keymaps_confirm
+if [[ ! $show_keymaps_confirm =~ ^[Yy]$ ]]; then
+    echo "Skipping keyboard layout listing."
+else
+    execute_command "localectl list-keymaps"
+fi
 keyboard_layout=$(get_input "Enter your keyboard layout" "de_CH-latin1")
 execute_command "loadkeys $keyboard_layout"
 
@@ -62,8 +66,9 @@ echo "1. 'g' for creating a GPT Partitionstable"
 echo "2. 'n' to create new Partition each"
 echo "2.a.  Use +1g (Boot) resp +4g (Swap) for 'Last Sector'"
 echo "3. 't' to choose the File System Type"
-echo "3.a.  Use '1' for EFI System (Boot)"
-echo "3.b.  Use '19' for Swap System (Swap)"
+echo "  a.  Use '1' for EFI System (Boot)"
+echo "  b.  Use '19' for Swap System (Swap)"
+echo "  c.  Skip Root Partition, already set to Linux Filesystem (20)"
 echo "4. 'w' save and exit fdisk"
 execute_command "fdisk $disk"
 
@@ -107,9 +112,9 @@ fi
 
 # Copy the entire repository to the new system
 execute_command "cp -r ../ /mnt/root/Open-Linux-Setup"
-execute_command "chmod +x /mnt/root/Open-Linux-Setup/Scripts/arch_install_chroot.sh"
+execute_command "chmod +x /mnt/root/Open-Linux-Setup/Other/arch_install_02.sh"
 
 echo -e "${GREEN}Pre-chroot setup completed!${NC}"
 echo "Now you can enter the chroot environment and run the chroot script:"
 echo "1. arch-chroot /mnt"
-echo "2. /root/Open-Linux-Setup/Scripts/arch_install_chroot.sh" 
+echo "2. /root/Open-Linux-Setup/Other/arch_install_02.sh" 
