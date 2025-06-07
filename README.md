@@ -128,7 +128,7 @@ Functions in the `Start_System_setup.sh` Script
 ## Dependencies
 This setup may depend on or integrate with other projects. A notable dependency is:
 
--   **Hyprland_Simple_Setup**: This project is designed with compatibility in mind for users who may also be using or integrating with my `Hyprland_Simple_Setup` repository:
+-   **Hyprland-Simple-Setup**: This project is designed with compatibility in mind for users who may also be using or integrating with my `Hyprland-Simple-Setup` repository:
     - The Functions: `configure_hyprlock_wallpaper` and `configure_dotfiles` depend on this repository.
 
 Please ensure any external dependencies are met before running the function of the main script.

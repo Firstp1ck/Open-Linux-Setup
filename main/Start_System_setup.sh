@@ -4089,10 +4089,10 @@ configure_wallpaper_path() {
 
 configure_hyprlock_wallpaper() {
     announce_step "Configuring Hyprlock wallpaper"
-    local default_wallpaper="$GIT_DIR/Hyprland_Simple_Setup/Wallpaper/Forest_01.png"
+    local default_wallpaper="$GIT_DIR/Hyprland-Simple-Setup/Wallpaper/Forest_01.png"
     local config_file="${HOME}/.config/hypr/sources/app_variables.conf"
-    local repo_url="https://github.com/Firstp1ck/Hyprland_Simple_Setup.git"
-    local repo_path="$GIT_DIR/Hyprland_Simple_Setup"
+    local repo_url="https://github.com/Firstp1ck/Hyprland-Simple-Setup.git"
+    local repo_path="$GIT_DIR/Hyprland-Simple-Setup"
     local wallpaper_path=""
 
     # Check if default wallpaper exists
@@ -4110,7 +4110,7 @@ configure_hyprlock_wallpaper() {
 
         # Check for Forest_01.png in the cloned repo
         if [ -f "$repo_path/Wallpaper/Forest_01.png" ]; then
-            wallpaper_path="$GIT_DIR/Hyprland_Simple_Setup/Wallpaper/Forest_01.png"
+            wallpaper_path="$GIT_DIR/Hyprland-Simple-Setup/Wallpaper/Forest_01.png"
         else
             # Get first wallpaper from the Wallpaper directory
             local first_wallpaper
