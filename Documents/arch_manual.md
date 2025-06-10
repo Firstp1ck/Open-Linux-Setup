@@ -114,7 +114,7 @@ nvim /etc/vconsole.conf
 
 # Set hostname
 nvim /etc/hostname
-    firstpickVM
+    usernameVM
 
 # Enable NetworkManager
 systemctl enable NetworkManager
@@ -141,8 +141,8 @@ reboot
 ## User Setup
 ```bash
 # Create user
-useradd -m -G wheel -s /bin/bash firstpick
-passwd firstpick
+useradd -m -G wheel -s /bin/bash username
+passwd username
 
 # Configure sudo
 export EDITOR=nvim
