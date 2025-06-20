@@ -71,15 +71,14 @@ pacstrap -K /mnt
     sudo pam grub efibootmgr
     curl git fish neovim
     man-db man-pages terminus-font
-    networkmanager qemu-guest-agent
+    networkmanager qemu-guest-agent xdg-user-dirs
+    pipewire pipewire-pulse wireplumber
 
     # Graphical Environment Packages
-    sddm hyprland xdg-desktop-portal-hyprland xdg-user-dirs
+    sddm hyprland xdg-desktop-portal-hyprland
     intel-ucode mesa vulkan-icd-loader sof-firmware
     lib32-mesa lib32-vulkan-icd-loader
-    pipewire pipewire-pulse wireplumber
-    kitty wofi falkon dolphin polkit
-    qemu-guest-agent
+    kitty wofi firefox dolphin polkit
 ```
 
 ### Generate fstab
