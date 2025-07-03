@@ -46,8 +46,8 @@ read -rp "Press Enter to continue if you have already enrolled the key, or Ctrl+
 
 # Configure Grub to load the signed key
 echo "[INFO] Signing GRUB EFI binary..."
-sudo sbsign --key ~/secure_boot/MOK.key --cert ~/secure_boot/MOK.crt --output /boot/efi/EFI/GRUB/grubx64.efi /boot/efi/EFI/GRUB/grubx64.efi || error_exit "Failed to sign GRUB EFI binary."
-sudo cp /boot/efi/EFI/GRUB/grubx64.efi /boot/efi/EFI/BOOT/grubx64.efi || error_exit "Failed to copy signed GRUB EFI binary."
+sudo sbsign --key ~/secure_boot/MOK.key --cert ~/secure_boot/MOK.crt --output /boot/efi/EFI/boot/bootx64.efi /boot/efi/EFI/boot/bootx64.efi || error_exit "Failed to sign GRUB EFI binary."
+sudo cp /boot/efi/EFI/boot/bootx64.efi /boot/efi/EFI/BOOT/bootx64.efi || error_exit "Failed to copy signed GRUB EFI binary."
 
 echo "[INFO] Signing Linux kernel..."
 sudo sbsign --key ~/secure_boot/MOK.key --cert ~/secure_boot/MOK.crt --output /boot/vmlinuz-linux.signed /boot/vmlinuz-linux || error_exit "Failed to sign Linux kernel."
