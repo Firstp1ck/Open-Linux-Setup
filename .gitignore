@@ -17,3 +17,4 @@ src/
 */.ssh/*
 
 main/system_variables.sh
+.DS_Store
