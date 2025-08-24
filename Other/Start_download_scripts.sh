@@ -2,65 +2,86 @@
 
 set -e
 
-# Check for jq
-if ! command -v jq &>/dev/null; then
-    echo "jq is required but not installed. Please install jq."
+# Dependencies check
+missing_deps=()
+for dep in jq curl gum; do
+    if ! command -v "$dep" &>/dev/null; then
+        missing_deps+=("$dep")
+    fi
+done
+if (( ${#missing_deps[@]} > 0 )); then
+    echo "Missing required dependencies: ${missing_deps[*]}"
+    echo "Please install them and re-run."
     exit 1
 fi
 
-# 1. Get GitHub username
-read -rp "Enter GitHub username: " GH_USER
+# 1) Ask for GitHub username using gum
+GH_USER=$(gum input --prompt "GitHub username: " --placeholder "e.g. torvalds")
+if [[ -z "$GH_USER" ]]; then
+    echo "GitHub username is required."
+    exit 1
+fi
 
-# 2. List public repos
-echo "Fetching public repositories for user '$GH_USER'..."
-REPOS=$(curl -s "https://api.github.com/users/$GH_USER/repos?per_page=100" | jq -r '.[].name')
+# 2) Fetch public repos with a spinner
+REPO_JSON=$(gum spin --spinner line --title "Fetching public repositories for '$GH_USER'..." -- \
+    curl -s "https://api.github.com/users/$GH_USER/repos?per_page=100")
+REPOS=$(echo "$REPO_JSON" | jq -r '.[].name')
 
 if [[ -z "$REPOS" ]]; then
     echo "No repositories found or user does not exist."
     exit 1
 fi
 
-echo "Available repositories:"
-select REPO in $REPOS; do
-    [[ -n "$REPO" ]] && break
-    echo "Invalid selection."
-done
+# 3) Select repository via gum
+REPO=$(printf "%s\n" "$REPOS" | gum filter --placeholder "Type to filter and select a repository" )
+if [[ -z "$REPO" ]]; then
+    echo "No repository selected."
+    exit 1
+fi
 
-# 3. List .sh files in the selected repo (from default branch)
-echo "Fetching .sh scripts from repository '$REPO'..."
-# Get default branch
-DEFAULT_BRANCH=$(curl -s "https://api.github.com/repos/$GH_USER/$REPO" | jq -r '.default_branch')
-# Get all .sh files (recursively)
-SH_FILES=$(curl -s "https://api.github.com/repos/$GH_USER/$REPO/git/trees/$DEFAULT_BRANCH?recursive=1" | jq -r '.tree[] | select(.path | endswith(".sh")) | .path')
+# 4) Get default branch and list .sh files
+REPO_INFO=$(gum spin --spinner line --title "Fetching repository info for '$REPO'..." -- \
+    curl -s "https://api.github.com/repos/$GH_USER/$REPO")
+DEFAULT_BRANCH=$(echo "$REPO_INFO" | jq -r '.default_branch')
+
+TREE_JSON=$(gum spin --spinner line --title "Scanning '$REPO' for .sh files (branch: $DEFAULT_BRANCH)..." -- \
+    curl -s "https://api.github.com/repos/$GH_USER/$REPO/git/trees/$DEFAULT_BRANCH?recursive=1")
+SH_FILES=$(echo "$TREE_JSON" | jq -r '.tree[] | select(.path | endswith(".sh")) | .path')
 
 if [[ -z "$SH_FILES" ]]; then
     echo "No .sh scripts found in this repository."
     exit 1
 fi
 
-echo "Available .sh scripts:"
-mapfile -t SH_ARRAY <<< "$SH_FILES"
-for i in "${!SH_ARRAY[@]}"; do
-    printf "%3d) %s\n" $((i+1)) "${SH_ARRAY[$i]}"
-done
+# 5) Multi-select scripts to download
+mapfile -t SH_ARRAY <<< "$(printf "%s\n" "$SH_FILES" | \
+    gum choose --no-limit --header "Select .sh scripts to download (Space to toggle, Enter to confirm)")"
 
-read -rp "Enter the numbers of the scripts to download (e.g. 1 2 3): " -a SCRIPT_NUMS
+if (( ${#SH_ARRAY[@]} == 0 )); then
+    echo "No scripts selected."
+    exit 1
+fi
 
-# 4. Ask download or download+execute
-read -rp "Download only (d) or download and execute (e)? [d/e]: " ACTION
+# 6) Choose action
+ACTION=$(printf "%s\n" "Download only" "Download and execute" | gum choose --header "Choose action")
+EXECUTE=false
+if [[ "$ACTION" == "Download and execute" ]]; then
+    EXECUTE=true
+fi
 
-for NUM in "${SCRIPT_NUMS[@]}"; do
-    IDX=$((NUM-1))
-    SCRIPT_PATH="${SH_ARRAY[$IDX]}"
+# 7) Download (and optionally execute) selected scripts
+for SCRIPT_PATH in "${SH_ARRAY[@]}"; do
     SCRIPT_NAME=$(basename "$SCRIPT_PATH")
     RAW_URL="https://raw.githubusercontent.com/$GH_USER/$REPO/$DEFAULT_BRANCH/$SCRIPT_PATH"
-    echo "Downloading $SCRIPT_NAME..."
-    curl -s -o "$SCRIPT_NAME" "$RAW_URL"
+
+    gum spin --spinner line --title "Downloading $SCRIPT_NAME" -- \
+        curl -L -sS -o "$SCRIPT_NAME" "$RAW_URL"
     chmod +x "$SCRIPT_NAME"
-    if [[ "$ACTION" == "e" ]]; then
-        echo "Executing $SCRIPT_NAME..."
+
+    if $EXECUTE; then
+        gum style --border normal --margin "1 0" --padding "0 1" --foreground 212 "Executing $SCRIPT_NAME..."
         ./"$SCRIPT_NAME"
     fi
 done
 
-echo "Done."
+gum style --border normal --margin "1 0" --padding "0 1" --foreground 82 "Done."

@@ -1,65 +1,101 @@
 #!/bin/bash
 
-# Define the services to check
+# Services to check
 services=("nginx" "xrdp" "docker" "NetworkManager.service")
 
-# Initialize a flag to track overall status
-all_ok=true
-
-echo "Starting service status checks..."
-
-# Check if systemd is available
+# Requirements checks
 if ! command -v systemctl >/dev/null 2>&1; then
-    echo "Error: systemctl is not available. This script requires systemd."
+    echo "systemctl is required (systemd)." >&2
     exit 1
 fi
 
-# Loop through each service and check its status
+if ! command -v gum >/dev/null 2>&1; then
+    echo "This script requires 'gum'. Install from https://github.com/charmbracelet/gum and re-run." >&2
+    exit 1
+fi
+
+all_ok=true
+rows=()
+
+# Header
+gum style \
+    --border normal \
+    --margin ". 1" \
+    --padding "1 2" \
+    --border-foreground 63 \
+    "Service Status Checks"
+
+# Helper: does unit exist
+unit_exists() {
+    local unit="$1"
+    local state
+    state=$(systemctl show -p LoadState --value "$unit" 2>/dev/null || true)
+    [[ "$state" == "loaded" ]]
+}
+
+# Check services
 for service in "${services[@]}"; do
-    echo "----------------------------------------"
-    echo "Checking $service..."
-    
-    # Check if the service exists
-    if ! systemctl list-unit-files "${service}" >/dev/null 2>&1; then
-        echo "$service is not installed - skipping."
+    # Quick spinner to indicate progress
+    gum spin --spinner dot --title "Checking ${service}" -- sleep 0.1
+
+    if ! unit_exists "$service"; then
+        status=$(gum style --foreground 214 "not installed")
+        note="skipped"
+        rows+=("${service}\t${status}\t${note}")
         continue
     fi
 
-    echo "Checking status of $service..."
-    # Check if the service is active
-    if sudo systemctl is-active --quiet "$service"; then
-        echo "$service is running."
+    if systemctl is-active --quiet "$service"; then
+        status=$(gum style --foreground 42 "running")
+        note="active"
     else
-        echo "$service is NOT running."
+        status=$(gum style --foreground 196 "not running")
+        note="inactive"
         all_ok=false
     fi
+
+    rows+=("${service}\t${status}\t${note}")
 done
 
-echo "----------------------------------------"
-echo "Testing nginx configuration..."
-
-# Check if nginx is installed before testing configuration
+# Nginx config test
+gum style --margin "1 ." --foreground 99 "Testing nginx configuration..."
 if command -v nginx >/dev/null 2>&1; then
-    if sudo nginx -t; then
-        echo "Nginx configuration test PASSED."
+    if gum spin --spinner pulse --title "nginx -t" -- sudo nginx -t >/tmp/nginx_test.out 2>&1; then
+        rows+=("nginx.conf\t$(gum style --foreground 42 PASSED)\tconfiguration valid")
     else
-        echo "Nginx configuration test FAILED."
+        rows+=("nginx.conf\t$(gum style --foreground 196 FAILED)\tsee /tmp/nginx_test.out")
         all_ok=false
     fi
 else
-    echo "Nginx is not installed - skipping configuration test."
+    rows+=("nginx\t$(gum style --foreground 214 missing)\tnginx not installed")
 fi
 
-echo "----------------------------------------"
+# Results table
+printf '%s\n' "${rows[@]}" | \
+    gum table \
+        --print \
+        --separator $'\t' \
+        --columns "Service,Status,Notes"
 
-# Final summary
+# Summary
+echo
 if $all_ok; then
-    echo "All installed services are running properly."
+    gum style \
+        --border rounded \
+        --border-foreground 42 \
+        --padding "0 2" \
+        --foreground 42 \
+        "All installed services are running properly."
 else
-    echo "Some services have issues. Please review the above messages."
+    gum style \
+        --border rounded \
+        --border-foreground 196 \
+        --padding "0 2" \
+        --foreground 196 \
+        "Some services have issues. Review the table above."
 fi
 
-echo -e "\nPress Enter to exit..."
-read -r
+# Wait for user
+gum input --placeholder "Press Enter to exit" >/dev/null
 
 exit 0

@@ -1,150 +1,185 @@
 #!/usr/bin/bash
 
-create_user() {
-    # Prompt for new username
-    read -rp "Enter new username: " username
-    if id "$username" &>/dev/null; then
-        echo "Error: User $username already exists." >&2
-        return 1
-    fi
+set -euo pipefail
 
-    # Create user with home and wheel group
-    sudo useradd -m -G wheel -s /bin/bash "$username"
-
-    # Set password securely with confirmation
-    while true; do
-        read -rsp "Enter password for $username: " password
-        echo
-        read -rsp "Confirm password: " password_confirm
-        echo
-        if [ "$password" = "$password_confirm" ]; then
-            echo "$username:$password" | sudo chpasswd
-            break
+require_gum() {
+    if ! command -v gum >/dev/null 2>&1; then
+        echo "This script requires 'gum' (TUI)." >&2
+        if command -v pacman >/dev/null 2>&1; then
+            echo "Install it with: sudo pacman -S gum" >&2
         else
-            echo "Passwords do not match. Try again."
+            echo "Install 'gum' via your package manager and re-run." >&2
         fi
+        exit 1
+    fi
+}
+
+require_root() {
+    if [ "$EUID" -ne 0 ]; then
+        gum style --foreground 196 "Please run as root."
+        exit 1
+    fi
+}
+
+list_non_system_users() {
+    getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 { print $1 }'
+}
+
+check_scripts_for_old_username() {
+    local home_dir="$1"
+    local old_username="$2"
+    grep -rl --exclude-dir={.cache,.config,.local} -E '\.(sh|bash)$' "$home_dir" 2>/dev/null | xargs -r grep -l "$old_username" 2>/dev/null || true
+}
+
+create_user() {
+    gum style --bold --foreground 212 "Create User"
+
+    local username
+    while true; do
+        username=$(gum input --prompt "Username: " --placeholder "new username" || true)
+        [ -z "${username:-}" ] && return 0
+        if id "$username" &>/dev/null; then
+            gum style --foreground 196 "User '$username' already exists."
+            continue
+        fi
+        if [[ ! "$username" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
+            gum style --foreground 196 "Invalid username. Use lowercase letters, digits, '_' or '-'."
+            continue
+        fi
+        break
     done
 
-    # Enable wheel group in sudoers if not already
-    sudo visudo -cf /etc/sudoers &>/dev/null || return 1
-    if ! sudo grep -q "^%wheel ALL=(ALL:ALL) ALL" /etc/sudoers; then
-        sudo sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
-        echo "Enabled sudo for wheel group in /etc/sudoers."
+    local password password_confirm
+    while true; do
+        password=$(gum input --password --prompt "Password: " || true)
+        [ -z "${password:-}" ] && gum style --foreground 196 "Password cannot be empty." && continue
+        password_confirm=$(gum input --password --prompt "Confirm: " || true)
+        if [ "$password" != "$password_confirm" ]; then
+            gum style --foreground 196 "Passwords do not match. Try again."
+            continue
+        fi
+        break
+    done
+
+    useradd -m -G wheel -s /bin/bash "$username"
+    echo "$username:$password" | chpasswd
+
+    if visudo -cf /etc/sudoers &>/dev/null; then
+        if ! grep -q "^%wheel ALL=(ALL:ALL) ALL" /etc/sudoers; then
+            sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
+            gum style --foreground 121 "Enabled sudo for wheel group in /etc/sudoers."
+        fi
     fi
 
-    # Optionally copy groups from another user
-    read -rp "Copy groups from existing user? (y/n): " choice
-    if [[ $choice =~ ^[Yy] ]]; then
-        read -rp "Enter source username for groups: " source_user
-        if ! id "$source_user" &>/dev/null; then
-            echo "Error: User $source_user does not exist." >&2
-            return 1
-        fi
-        # Get group list, excluding the source username
-        groups=$(id -nG "$source_user" | tr ' ' ',')
-        if [ -n "$groups" ]; then
-            sudo usermod -aG "$groups" "$username"
-            echo "Added $username to groups: ${groups//,/ }"
+    if gum confirm "Copy groups from existing user?"; then
+        local source_user
+        source_user=$(list_non_system_users | gum choose --no-limit=false --header "Choose source user" || true)
+        if [ -n "${source_user:-}" ]; then
+            if ! id "$source_user" &>/dev/null; then
+                gum style --foreground 196 "User '$source_user' does not exist. Skipping group copy."
+            else
+                local groups
+                groups=$(id -nG "$source_user" | tr ' ' '\n' | grep -v "^$source_user$" | paste -sd, -)
+                if [ -n "$groups" ]; then
+                    usermod -aG "$groups" "$username"
+                    gum style --foreground 121 "Added $username to groups: $(echo "$groups" | tr ',' ' ')"
+                fi
+            fi
         fi
     fi
 
-    echo "User $username created successfully."
+    gum style --foreground 121 "User '$username' created successfully."
 }
 
 user_management() {
-    # Function to list non-system users
-    list_users() {
-        echo "Available users:"
-        getent passwd {1000..60000} | cut -d: -f1
-    }
-
-    # Function to check for bash scripts with old username
-    check_scripts_for_old_username() {
-        local home_dir="$1"
-        local old_username="$2"
-        echo "Checking for bash scripts containing '$old_username' in $home_dir..."
-        grep -rl --exclude-dir={.cache,.config,.local} -E '\.sh$|\.bash$' "$home_dir" 2>/dev/null | xargs grep -l "$old_username" 2>/dev/null
-    }
-
     while true; do
-        # Main menu
-        echo "Select action:"
-        select action in "Delete User" "Modify Username" "Modify Password" "Exit"; do
-            case $action in
-                "Delete User"|"Modify Username"|"Modify Password")
-                    list_users
-                    read -rp "Enter username: " username
-                    if ! id "$username" &>/dev/null; then
-                        echo "Error: User $username does not exist." >&2
-                        break
-                    fi
-                    ;;
-                "Exit")
-                    echo "Exiting."
-                    return 0
-                    ;;
-                *)
-                    echo "Invalid selection." >&2
-                    continue
-                    ;;
-            esac
-            
-            case $action in
-                "Delete User")
-                    sudo userdel -r "$username" && echo "Deleted $username" || echo "Deletion failed" >&2
-                    break
-                    ;;
-                
-                "Modify Username")
-                    read -rp "Enter new username: " new_username
-                    if id "$new_username" &>/dev/null; then
-                        echo "Error: $new_username already exists." >&2
-                        break
-                    fi
-                    
-                    # Get old home dir
-                    old_home=$(eval echo ~"$username")
-                    new_home="/home/$new_username"
-                    
-                    # Check for scripts with old username
-                    affected_files=$(check_scripts_for_old_username "$old_home" "$username")
-                    if [ -n "$affected_files" ]; then
-                        echo "Files needing updates:"
-                        echo "$affected_files"
+        local action
+        action=$(gum choose "Delete User" "Modify Username" "Modify Password" "Back" --header "User Management" || true)
+        [ -z "${action:-}" ] && return 0
+        [ "$action" = "Back" ] && return 0
+
+        local username
+        username=$(list_non_system_users | gum choose --header "Select user" || true)
+        [ -z "${username:-}" ] && continue
+        if ! id "$username" &>/dev/null; then
+            gum style --foreground 196 "User '$username' does not exist."
+            continue
+        fi
+
+        case "$action" in
+            "Delete User")
+                if gum confirm "Delete '$username' and remove home directory?"; then
+                    if userdel -r "$username"; then
+                        gum style --foreground 121 "Deleted '$username'"
                     else
-                        echo "No scripts contain the old username."
+                        gum style --foreground 196 "Deletion failed"
                     fi
-                    
-                    # Rename user and move home dir
-                    sudo usermod -l "$new_username" -d "$new_home" -m "$username" && \
-                    sudo groupmod -n "$new_username" "$username" && \
-                    echo "Renamed $username → $new_username" || echo "Renaming failed" >&2
+                fi
+                ;;
+
+            "Modify Username")
+                local new_username
+                while true; do
+                    new_username=$(gum input --prompt "New username: " --placeholder "e.g. johndoe" || true)
+                    [ -z "${new_username:-}" ] && break
+                    if id "$new_username" &>/dev/null; then
+                        gum style --foreground 196 "User '$new_username' already exists."
+                        continue
+                    fi
+                    if [[ ! "$new_username" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
+                        gum style --foreground 196 "Invalid username. Use lowercase letters, digits, '_' or '-'."
+                        continue
+                    fi
                     break
-                    ;;
-                
-                "Modify Password")
-                    read -rsp "Enter new password: " password
-                    echo
-                    echo "$username:$password" | sudo chpasswd && echo "Password updated" || echo "Password change failed" >&2
-                    break
-                    ;;
-            esac
-        done
+                done
+                [ -z "${new_username:-}" ] && continue
+
+                local old_home new_home
+                old_home=$(eval echo ~"$username")
+                new_home="/home/$new_username"
+
+                local affected_files
+                affected_files=$(check_scripts_for_old_username "$old_home" "$username" || true)
+                if [ -n "${affected_files:-}" ]; then
+                    printf "%s\n" "The following files reference '$username':" | gum style --foreground 214
+                    echo "$affected_files" | gum pager --soft-wrap
+                else
+                    gum style --foreground 244 "No scripts contain the old username."
+                fi
+
+                if usermod -l "$new_username" -d "$new_home" -m "$username"; then
+                    if getent group "$username" >/dev/null 2>&1; then
+                        groupmod -n "$new_username" "$username" || true
+                    fi
+                    gum style --foreground 121 "Renamed $username → $new_username"
+                else
+                    gum style --foreground 196 "Renaming failed"
+                fi
+                ;;
+
+            "Modify Password")
+                local password
+                password=$(gum input --password --prompt "New password: " || true)
+                [ -z "${password:-}" ] && continue
+                if echo "$username:$password" | chpasswd; then
+                    gum style --foreground 121 "Password updated for '$username'"
+                else
+                    gum style --foreground 196 "Password change failed"
+                fi
+                ;;
+        esac
     done
 }
 
 main() {
-    # Check if script is run as root
-    if [ "$EUID" -ne 0 ]; then
-        echo "Please run as root." >&2
-        exit 1
-    fi
+    require_gum
+    require_root
 
-    # Main menu
-    PS3="Select an option: "
-    options=("Create User" "User Management" "Exit")
-    select opt in "${options[@]}"; do
-        case $opt in
+    while true; do
+        local opt
+        opt=$(gum choose "Create User" "User Management" "Exit" --header "User & Access Management" || true)
+        [ -z "${opt:-}" ] && exit 0
+        case "$opt" in
             "Create User")
                 create_user
                 ;;
@@ -152,20 +187,13 @@ main() {
                 user_management
                 ;;
             "Exit")
-                echo "Exiting."
+                gum style --foreground 244 "Exiting."
                 break
-                ;;
-            *)
-                echo "Invalid option." >&2
                 ;;
         esac
     done
 }
 
-# Run the main function
-main
-
-echo -e "\nPress Enter to exit..."
-read -r
+main "$@"
 
 exit 0

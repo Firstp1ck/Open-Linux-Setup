@@ -1,227 +1,293 @@
 #!/bin/bash
 
-# Wi-Fi Diagnostic Script
-# This script performs a series of checks to diagnose Wi-Fi connectivity issues.
-# It does not alter any system configurations.
+# Wi-Fi Diagnostic Script (gum, non-interactive)
+# Runs all checks automatically and prints concise PASS/FAIL with reasons.
 
-# Function Definitions for Informative Output
-echo_info() {
-    echo -e "\e[34m[INFO]\e[0m $1"
-}
+# --- Prerequisites & Notices ---
+if ! command -v gum >/dev/null 2>&1; then
+    echo "[ERROR] This script requires 'gum'. Install it (e.g., 'pacman -S gum' or 'brew install gum') and rerun."
+    exit 1
+fi
 
-echo_success() {
-    echo -e "\e[32m[SUCCESS]\e[0m $1"
-}
-
-echo_warning() {
-    echo -e "\e[33m[WARNING]\e[0m $1"
-}
-
-echo_error() {
-    echo -e "\e[31m[ERROR]\e[0m $1"
-}
-
-# Ensure the script is run with necessary privileges
 if [ "$EUID" -ne 0 ]; then
-    echo_warning "Some checks might require superuser privileges. Consider running the script with sudo."
-fi
-
-echo_success "Starting Wi-Fi diagnostic checks..."
-
-# 1. Check for Multiple Network Managers
-echo_info "1. Checking for active primary Network Managers..."
-
-# Define primary network managers to check
-declare -a primary_network_managers=("NetworkManager.service" "systemd-networkd.service")
-
-# Initialize an array to hold enabled primary network managers
-enabled_network_managers=()
-
-# Iterate over each primary network manager and check if it's enabled
-for service in "${primary_network_managers[@]}"; do
-    if systemctl is-enabled "$service" >/dev/null 2>&1; then
-        enabled_network_managers+=("$service")
+    if ! command -v sudo >/dev/null 2>&1; then
+        gum style --foreground 196 "[ERROR] sudo is not installed. Install sudo or run as root."
+        exit 1
     fi
-done
-
-# Determine the number of enabled primary network managers
-num_enabled=${#enabled_network_managers[@]}
-
-if [ "$num_enabled" -le 1 ]; then
-    echo_success "Only one primary Network Manager is enabled."
-else
-    echo_warning "Multiple primary Network Managers are enabled:"
-    for svc in "${enabled_network_managers[@]}"; do
-        echo "  - $svc"
-    done
-fi
-echo ""
-
-# 2. Check Hardware Issues with RFKill
-echo_info "2. Checking for hardware or software blocks using rfkill..."
-rfkill_output=$(rfkill list all)
-echo "$rfkill_output"
-if echo "$rfkill_output" | grep -q "Hard blocked: yes\|Soft blocked: yes"; then
-    echo_warning "There are hardware or software blocks on your Wi-Fi device."
-else
-    echo_success "No hardware or software blocks detected."
-fi
-echo ""
-
-# 3. Check Wi-Fi Related Logs
-echo_info "3. Checking Wi-Fi related logs from the current boot..."
-if journalctl -b | grep -iq "wifi" | sort | uniq -f 6; then
-    journalctl -b | grep -i "wifi" | sort | uniq -f 6
-else
-    echo_success "No Wi-Fi related logs found for the current boot."
-fi
-echo ""
-
-echo_info "   Checking NetworkManager logs from the current boot..."
-if journalctl -u NetworkManager -b | grep -iq "wifi" | sort | uniq -f 6; then
-    journalctl -u NetworkManager -b | grep -i "wifi" | sort | uniq -f 6
-else
-    echo_success "No Wi-Fi related logs found in NetworkManager logs for the current boot."
-fi
-echo ""
-
-# 4. Check if Persistent Logs are Enabled
-echo_info "4. Checking if persistent logs are enabled in systemd-journald..."
-journald_conf="/etc/systemd/journald.conf"
-if grep -Eq "^Storage=persistent" "$journald_conf"; then
-    echo_success "Persistent logging is enabled."
-else
-    echo_warning "Persistent logging is not enabled. Logs may not be saved after reboot."
-fi
-echo ""
-
-# 5. Check Wi-Fi Driver Information
-echo_info "5. Checking Wi-Fi driver information..."
-lspci_output=$(lspci -k | grep -A3 Network)
-if [ -n "$lspci_output" ]; then
-    echo "$lspci_output"
-    echo_success "Retrieved Wi-Fi adapter information."
-else
-    echo_warning "No Wi-Fi adapter information found using lspci."
-fi
-echo ""
-
-echo_info "   Checking dmesg for ath9k driver messages..."
-dmesg_ath9k=$(dmesg | grep ath9k)
-if [ -n "$dmesg_ath9k" ]; then
-    echo "$dmesg_ath9k"
-else
-    echo_success "No ath9k driver messages found in dmesg."
-fi
-echo ""
-
-echo_info "   Checking dmesg for wlan0 interface messages..."
-dmesg_wlan0=$(dmesg | grep wlan0 | sort | uniq -f 2)
-if [ -n "$dmesg_wlan0" ]; then
-    echo "$dmesg_wlan0"
-else
-    echo_success "No wlan0 interface messages found in dmesg."
-fi
-echo ""
-
-# 6. Check MTU Settings
-echo_info "6. Checking MTU settings on network interfaces..."
-ip link
-echo ""
-
-# 7. Check Fragmentation Issues with Ping
-echo_info "7. Checking for fragmentation issues using ping (pinging 8.8.8.8 with packet size 1472)..."
-ping_test=$(ping -c 4 -M do\; -s 1472 8.8.8.8 2>/dev/null)
-if [ $? -eq 0 ]; then
-    echo_success "No fragmentation issues detected."
-    echo "$ping_test"
-else
-    echo_warning "Fragmentation issues detected or ping failed."
-    echo "$ping_test"
-fi
-echo ""
-
-# 8. Check Regulatory Domains
-echo_info "8. Checking current regulatory domain settings..."
-iw reg get
-echo ""
-
-# 9. Verify DHCP Configuration
-echo_info "9. Checking DHCP client logs for dhcpcd..."
-dhcpcd_logs=$(journalctl -u dhcpcd -b)
-if [ -n "$dhcpcd_logs" ]; then
-    echo "$dhcpcd_logs"
-else
-    echo_success "No dhcpcd logs found for the current boot."
-fi
-echo ""
-
-echo_info "   Checking DHCP client logs for dhclient@wlan0..."
-dhclient_logs=$(journalctl -u dhclient@wlan0 -b)
-if [ -n "$dhclient_logs" ]; then
-    echo "$dhclient_logs"
-else
-    echo_success "No dhclient@wlan0 logs found for the current boot."
-fi
-echo ""
-
-# 10. Display NetworkManager Service Status
-echo_info "10. Checking NetworkManager service status..."
-systemctl status NetworkManager.service --no-pager
-echo ""
-
-# 11. Check Power Management Settings for Wi-Fi
-echo_info "11. Checking Wi-Fi power management settings..."
-# Determine the Wi-Fi interface name dynamically
-wifi_interface=$(iw dev | awk '$1=="Interface"{print $2}' | head -n1)
-if [ -n "$wifi_interface" ]; then
-    powersave_status=$(iw dev "$wifi_interface" get power_save 2>/dev/null)
-    if [ $? -eq 0 ]; then
-        echo "$powersave_status"
+    gum style --foreground 214 "[WARNING] Some checks require superuser privileges."
+    if gum confirm "Re-run this script with sudo now?" --default=true; then
+        sudo -k
+        exec sudo -E -- "$0" "$@"
     else
-        echo_warning "Could not retrieve power save status for $wifi_interface. Ensure the interface name is correct."
+        gum style --foreground 214 "[INFO] Continuing without sudo; some checks may be limited."
     fi
-else
-    echo_warning "No Wi-Fi interface found."
 fi
-echo ""
 
-# 12. Check iptables FORWARD Chain Logging
-echo_info "12. Checking iptables FORWARD chain for logging rules..."
-iptables -L FORWARD -v -n
-echo ""
+gum style --foreground 42 --bold "Starting Wi-Fi diagnostic checks (non-interactive)..."
 
-# 13. Check ath9k Driver Configuration
-echo_info "13. Checking ath9k driver configuration..."
-modprobe_conf="/etc/modprobe.d/ath9k.conf"
-if [ -f "$modprobe_conf" ]; then
-    echo "Contents of $modprobe_conf:"
-    cat "$modprobe_conf"
-else
-    echo_success "$modprobe_conf does not exist. No custom ath9k configurations found."
-fi
-echo ""
+# --- Helpers ---
+PASS_COUNT=0
+FAIL_COUNT=0
+WARN_COUNT=0
 
-echo_success "Wi-Fi diagnostic checks completed."
-echo ""
+style_pass() { gum style --foreground 42 --bold "$1"; }
+style_fail() { gum style --foreground 196 --bold "$1"; }
+style_info() { gum style --foreground 63 "$1"; }
+style_warn() { gum style --foreground 214 --bold "$1"; }
 
-# 14. Prompt to Open Journal Log
-echo_info "14. Would you like to open the full journal log for the current boot? (y/n)"
-read -r -p "Open journal log? [y/N]: " choice
+# Detect Wi-Fi interface name dynamically
+get_wifi_interface() {
+    iw dev | awk '$1=="Interface"{print $2}' | head -n1
+}
 
-case "$choice" in
-    y|Y )
-        echo_info "Opening journal log... Press 'q' to exit."
-        journalctl -b -g 'wifi|network|wlan'
-        ;;
-    * )
-        echo_info "Skipping opening the journal log."
-        ;;
-esac
+print_result() {
+    local title="$1"; shift
+    local status="$1"; shift # "PASS" or "FAIL"
+    local info="$*"
+    if [ "$status" = "PASS" ]; then
+        style_pass "[PASS] $title"; [ -n "$info" ] && style_info "  - $info"
+        PASS_COUNT=$((PASS_COUNT+1))
+    elif [ "$status" = "WARN" ]; then
+        style_warn "[WARN] $title"; [ -n "$info" ] && style_info "  - $info"
+        WARN_COUNT=$((WARN_COUNT+1))
+    else
+        style_fail "[FAIL] $title"; [ -n "$info" ] && echo "  - reason: $info"
+        FAIL_COUNT=$((FAIL_COUNT+1))
+    fi
+}
 
-echo_success "Script execution finished."
+# --- Checks ---
+check_network_managers() {
+    local primary_network_managers=("NetworkManager.service" "systemd-networkd.service")
+    local enabled_network_managers=()
+    for service in "${primary_network_managers[@]}"; do
+        if systemctl is-enabled "$service" >/dev/null 2>&1; then
+            enabled_network_managers+=("$service")
+        fi
+    done
+    local num_enabled=${#enabled_network_managers[@]}
+    if [ "$num_enabled" -le 1 ]; then
+        print_result "Primary Network Managers" "PASS" "Enabled: ${enabled_network_managers[*]:-none}"
+    else
+        print_result "Primary Network Managers" "FAIL" "Multiple enabled: ${enabled_network_managers[*]}"
+    fi
+}
 
-echo -e "\nPress Enter to exit..."
-read -r
+check_rfkill() {
+    local rfkill_output
+    rfkill_output=$(rfkill list all 2>&1)
+    if echo "$rfkill_output" | grep -q "Hard blocked: yes\|Soft blocked: yes"; then
+        local lines
+        lines=$(echo "$rfkill_output" | grep -E "(Hard|Soft) blocked: yes" | tr '\n' '; ')
+        print_result "RFKill blocks" "FAIL" "$lines"
+    else
+        print_result "RFKill blocks" "PASS" "No hard/soft blocks detected"
+    fi
+}
 
+check_wifi_logs_boot() {
+    local suspicious_regex='fail|error|timed out|timeout|disconnect|denied|deauth|unreachable|no carrier|link down'
+    local lines
+    lines=$(journalctl -b 2>/dev/null | grep -i "wifi" | grep -Eai "$suspicious_regex" | head -n 5)
+    if [ -n "$lines" ]; then
+        lines=$(echo "$lines" | tr '\n' ' ')
+        print_result "Wi-Fi logs (boot)" "FAIL" "Suspicious entries: ${lines} ..."
+    else
+        print_result "Wi-Fi logs (boot)" "PASS" "No suspicious Wi-Fi entries"
+    fi
+}
+
+check_nm_wifi_logs_boot() {
+    # Only flag warnings/errors, and only Wi-Fi related entries to reduce false positives
+    local lines
+    lines=$(journalctl -u NetworkManager -b -p warning..alert 2>/dev/null | \
+        grep -Eai 'wifi|wlan|wpa|supplicant|802\.1x|auth' | head -n 5)
+    if [ -n "$lines" ]; then
+        lines=$(echo "$lines" | tr '\n' ' ')
+        print_result "NetworkManager Wi-Fi logs (boot)" "FAIL" "Warnings/Errors: ${lines} ..."
+    else
+        print_result "NetworkManager Wi-Fi logs (boot)" "PASS" "No Wi-Fi warnings/errors in NM logs"
+    fi
+}
+
+check_journald_persistent() {
+    local journald_conf="/etc/systemd/journald.conf"
+    if grep -Eq "^Storage=persistent" "$journald_conf"; then
+        print_result "Journald persistent logs" "PASS" "Storage=persistent configured"
+    else
+        print_result "Journald persistent logs" "FAIL" "Persistent logs disabled; logs may be lost on reboot"
+    fi
+}
+
+check_wifi_driver_info() {
+    local lspci_output
+    lspci_output=$(lspci -k | grep -A3 Network)
+    if [ -n "$lspci_output" ]; then
+        local model
+        model=$(echo "$lspci_output" | head -n1 | sed 's/^.*: //')
+        print_result "Wi-Fi driver info (lspci)" "PASS" "$model"
+    else
+        print_result "Wi-Fi driver info (lspci)" "FAIL" "No Wi-Fi adapter found via lspci"
+    fi
+}
+
+check_dmesg_ath9k() {
+    local suspicious_regex='fail|error|timeout|timed out|reset|firmware|hang'
+    local lines
+    lines=$(dmesg 2>/dev/null | grep -i ath9k | grep -Eai "$suspicious_regex" | head -n 5)
+    if [ -n "$lines" ]; then
+        lines=$(echo "$lines" | tr '\n' ' ')
+        print_result "dmesg: ath9k" "FAIL" "Suspicious entries: ${lines} ..."
+    else
+        print_result "dmesg: ath9k" "PASS" "No suspicious ath9k messages"
+    fi
+}
+
+check_dmesg_wlan0() {
+    local suspicious_regex='fail|error|timeout|timed out|reset|firmware|disconnect|deauth|link down'
+    local lines
+    lines=$(dmesg 2>/dev/null | grep -i wlan0 | grep -Eai "$suspicious_regex" | head -n 5)
+    if [ -n "$lines" ]; then
+        lines=$(echo "$lines" | tr '\n' ' ')
+        print_result "dmesg: wlan0" "FAIL" "Suspicious entries: ${lines} ..."
+    else
+        print_result "dmesg: wlan0" "PASS" "No suspicious wlan0 messages"
+    fi
+}
+
+check_mtu() {
+    local wifi_if
+    wifi_if=$(get_wifi_interface)
+    local mtu
+    mtu=$(ip -o link 2>/dev/null | awk -v iface="$wifi_if" -F': ' '$2==iface{print $3}' | sed -n 's/.*mtu \([0-9]\+\).*/\1/p')
+    if [ -n "$wifi_if" ] && [ -n "$mtu" ]; then
+        print_result "MTU settings" "PASS" "$wifi_if mtu=$mtu"
+    else
+        print_result "MTU settings" "PASS" "See: ip link (interface not found or MTU unreadable)"
+    fi
+}
+
+check_fragmentation_ping() {
+    local ping_test
+    ping_test=$(ping -c 4 -M "do" -s 1472 8.8.8.8 2>&1)
+    if [ $? -eq 0 ]; then
+        print_result "Fragmentation test (ping 8.8.8.8)" "PASS" "Path MTU OK"
+    else
+        local summary
+        summary=$(echo "$ping_test" | tail -n 3 | tr '\n' ' ')
+        print_result "Fragmentation test (ping 8.8.8.8)" "FAIL" "$summary"
+    fi
+}
+
+check_regdom() {
+    local reg
+    reg=$(iw reg get 2>/dev/null | grep -E "country [A-Z]{2}")
+    if [ -n "$reg" ]; then
+        print_result "Regulatory domain" "PASS" "$(echo "$reg" | head -n1 | xargs)"
+    else
+        # Not strictly a failure; warn user it's advisable to set a country code
+        print_result "Regulatory domain" "WARN" "No country code configured"
+    fi
+}
+
+check_dhcpcd_logs() {
+    local suspicious_regex='fail|error|timeout|timed out|nack|decline|no lease|expired'
+    local lines
+    lines=$(journalctl -u dhcpcd -b 2>/dev/null | grep -Eai "$suspicious_regex" | head -n 5)
+    if [ -n "$lines" ]; then
+        lines=$(echo "$lines" | tr '\n' ' ')
+        print_result "DHCP logs: dhcpcd" "FAIL" "Suspicious entries: ${lines} ..."
+    else
+        print_result "DHCP logs: dhcpcd" "PASS" "No suspicious entries"
+    fi
+}
+
+check_dhclient_logs() {
+    local suspicious_regex='fail|error|timeout|timed out|nack|decline|no lease|expired'
+    local lines
+    lines=$(journalctl -u dhclient@wlan0 -b 2>/dev/null | grep -Eai "$suspicious_regex" | head -n 5)
+    if [ -n "$lines" ]; then
+        lines=$(echo "$lines" | tr '\n' ' ')
+        print_result "DHCP logs: dhclient@wlan0" "FAIL" "Suspicious entries: ${lines} ..."
+    else
+        print_result "DHCP logs: dhclient@wlan0" "PASS" "No suspicious entries or service not used"
+    fi
+}
+
+check_nm_status() {
+    if systemctl is-active --quiet NetworkManager.service; then
+        print_result "NetworkManager service" "PASS" "Active"
+    else
+        local status
+        status=$(systemctl status NetworkManager.service --no-pager 2>&1 | sed -n '1,5p' | tr '\n' ' ')
+        print_result "NetworkManager service" "FAIL" "$status"
+    fi
+}
+
+check_wifi_power_save() {
+    local wifi_interface
+    wifi_interface=$(get_wifi_interface)
+    if [ -n "$wifi_interface" ]; then
+        local powersave_status
+        powersave_status=$(iw dev "$wifi_interface" get power_save 2>&1)
+        if [ $? -eq 0 ]; then
+            local mode
+            mode=$(echo "$powersave_status" | awk '{print $NF}')
+            print_result "Wi-Fi power management" "PASS" "$wifi_interface power_save=$mode"
+        else
+            print_result "Wi-Fi power management" "FAIL" "Could not read power save for $wifi_interface"
+        fi
+    else
+        print_result "Wi-Fi power management" "FAIL" "No Wi-Fi interface found"
+    fi
+}
+
+check_iptables_forward() {
+    # Informational; treat as PASS with brief summary of counts
+    local line
+    line=$(iptables -L FORWARD -v -n 2>/dev/null | sed -n '2p')
+    if [ -n "$line" ]; then
+        print_result "iptables FORWARD chain" "PASS" "$(echo "$line" | xargs)"
+    else
+        print_result "iptables FORWARD chain" "PASS" "No rules or iptables unavailable"
+    fi
+}
+
+check_ath9k_conf() {
+    local modprobe_conf="/etc/modprobe.d/ath9k.conf"
+    if [ -f "$modprobe_conf" ]; then
+        local first
+        first=$(head -n 1 "$modprobe_conf" | xargs)
+        print_result "ath9k driver config" "PASS" "Found $modprobe_conf: ${first:-non-empty}"
+    else
+        print_result "ath9k driver config" "PASS" "No custom config present"
+    fi
+}
+
+run_automatic() {
+    check_network_managers
+    check_rfkill
+    check_wifi_logs_boot
+    check_nm_wifi_logs_boot
+    check_journald_persistent
+    check_wifi_driver_info
+    check_dmesg_ath9k
+    check_dmesg_wlan0
+    check_mtu
+    check_fragmentation_ping
+    check_regdom
+    check_dhcpcd_logs
+    check_dhclient_logs
+    check_nm_status
+    check_wifi_power_save
+    check_iptables_forward
+    check_ath9k_conf
+
+    echo
+    gum style --bold "Summary: $(style_pass \"$PASS_COUNT pass\") / $(style_warn \"$WARN_COUNT warn\") / $(style_fail \"$FAIL_COUNT fail\")"
+}
+
+run_automatic
+
+gum style --foreground 42 --bold "Wi-Fi diagnostic session finished."
 exit 0
