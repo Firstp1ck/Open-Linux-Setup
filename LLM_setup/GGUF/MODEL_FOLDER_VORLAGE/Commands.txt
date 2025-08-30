@@ -1,0 +1,27 @@
+::Go to Huggingface, Download GGUF File into directory:
+F:\Programme\OllamaModels\GGUF_Files\MODEL_FOLDER
+
+::Create modelfile
+FROM F:\Programme\OllamaModels\GGUF_Files\MODEL_FOLDER\MODEL_NAME.gguf
+
+TEMPLATE """{{- if .System }}
+<|im_start|>system {{ .System }}<|im_end|>
+{{- end }}
+<|im_start|>user
+{{ .Prompt }}<|im_end|>
+<|im_start|>assistant
+"""
+
+SYSTEM """"""
+
+PARAMETER stop <|im_start|>
+PARAMETER stop <|im_end|>
+
+::Open CMD, the GGUF Folder and type:
+F:
+
+::Change Directory:
+cd F:\Programme\OllamaModels\GGUF_Files\MODEL_FOLDER
+
+::Ollama command (only General Name)
+ollama create Smegmma-9B-v1g-Q8_0
