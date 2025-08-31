@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Script to check Pi-hole functionality using Charmbracelet gum TUI
 

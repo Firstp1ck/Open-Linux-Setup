@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 echo "$HOME/ * /Open-Linux-Setup"
 read -rp "Enter the full path to system_variables.sh or just the directory replacing *: " user_input

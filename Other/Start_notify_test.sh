@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 # Low priority notification
 notify-send -u low "Low Priority" "This is a low priority test message"
 

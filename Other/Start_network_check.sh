@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Wi-Fi Diagnostic Script (gum, non-interactive)
 # Runs all checks automatically and prints concise PASS/FAIL with reasons.

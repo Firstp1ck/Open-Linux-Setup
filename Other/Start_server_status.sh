@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Services to check
 services=("nginx" "xrdp" "docker" "NetworkManager.service")

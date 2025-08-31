@@ -1,4 +1,5 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
 # See Open-Linux-Setup/Documents/aur_package_manager.md for detailed Instructions and Importent Notes.
 
 # Config paths for persisting defaults
