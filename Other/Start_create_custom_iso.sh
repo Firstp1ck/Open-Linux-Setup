@@ -6,6 +6,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
+BOLD='\033[1m'
 
 # Helper: check if gum is available
 use_gum() { command -v gum &>/dev/null; }
@@ -13,33 +14,45 @@ use_gum() { command -v gum &>/dev/null; }
 # gum-aware printing helpers
 print_info() {
     if use_gum; then
-        gum style --foreground "#3B82F6" "[INFO] $1"
+        gum style --foreground "#3B82F6" --bold "[INFO] ℹ️  $1"
     else
-        echo -e "${BLUE}[INFO]${NC} $1"
+        echo -e "${BLUE}${BOLD}[INFO] ℹ️ ${NC} $1"
     fi
 }
 
 print_success() {
     if use_gum; then
-        gum style --foreground "#10B981" "[SUCCESS] $1"
+        gum style --foreground "#10B981" --bold "[SUCCESS] ✅  $1"
     else
-        echo -e "${GREEN}[SUCCESS]${NC} $1"
+        echo -e "${GREEN}${BOLD}[SUCCESS] ✅ ${NC} $1"
     fi
 }
 
 print_warning() {
     if use_gum; then
-        gum style --foreground "#F59E0B" "[WARNING] $1"
+        gum style --foreground "#F59E0B" --bold "[WARNING] ⚠️  $1"
     else
-        echo -e "${YELLOW}[WARNING]${NC} $1"
+        echo -e "${YELLOW}${BOLD}[WARNING] ⚠️ ${NC} $1"
     fi
 }
 
 print_error() {
     if use_gum; then
-        gum style --foreground "#EF4444" "[ERROR] $1"
+        gum style --foreground "#EF4444" --bold "[ERROR] ❌  $1"
     else
-        echo -e "${RED}[ERROR]${NC} $1"
+        echo -e "${RED}${BOLD}[ERROR] ❌ ${NC} $1"
+    fi
+}
+
+# Section header for better visual separation
+print_section() {
+    local title="$1"
+    if use_gum; then
+        gum style --foreground "#A78BFA" --bold "────────────────────────────────────────"
+        gum style --foreground "#A78BFA" --bold "  $title"
+        gum style --foreground "#A78BFA" --bold "────────────────────────────────────────"
+    else
+        echo -e "\n${YELLOW}${BOLD}========== $title ==========${NC}"
     fi
 }
 
@@ -48,26 +61,29 @@ ask_yes_no() {
     # Usage: ask_yes_no "Prompt" "default"; returns 0 for yes, 1 for no
     local prompt="$1"
     local default_ans="${2:-}"
-    if use_gum; then
-        local args=()
-        case "$default_ans" in
-            y|Y) args+=(--default) ;;
-        esac
-        if gum confirm "${args[@]}" "$prompt"; then
-            return 0
-        else
-            return 1
-        fi
-    fi
-    # Fallback to read
-    local hint reply
+    local hint
     case "$default_ans" in
         y|Y) hint="Y/n" ;;
         n|N) hint="y/N" ;;
         *)   hint="y/n" ;;
     esac
+
+    if use_gum; then
+        local args=()
+        case "$default_ans" in
+            y|Y) args+=(--default) ;;
+        esac
+        if gum confirm "${args[@]}" "$prompt [$hint]"; then
+            return 0
+        else
+            return 1
+        fi
+    fi
+    # Fallback to read with a highlighted prompt
+    local reply question
+    question=$(printf "${YELLOW}${BOLD}? %s [%s]: ${NC}" "$prompt" "$hint")
     while true; do
-        read -rp "$prompt [$hint]: " reply
+        read -rp "$question" reply
         reply=${reply,,}
         if [[ -z "$reply" ]]; then
             case "$default_ans" in
@@ -339,6 +355,7 @@ check_lsb_release() {
 
 # Function to configure lsb-release
 configure_lsb_release() {
+    print_section "Configure /etc/lsb-release"
     print_info "Current /etc/lsb-release content:"
     if [[ -f /etc/lsb-release ]]; then
         cat /etc/lsb-release
@@ -357,7 +374,7 @@ configure_lsb_release() {
         echo "2) Arch Linux (generic Arch configuration)"
         echo "3) Skip configuration"
         while true; do
-            read -rp "Choose configuration (1-3): " choice
+            read -rp "$(printf "${YELLOW}${BOLD}? Choose configuration (1-3): ${NC}")" choice
             case $choice in
                 1) selection="EndeavourOS"; break;;
                 2) selection="Arch Linux"; break;;
@@ -579,14 +596,13 @@ get_user_preferences() {
     
     echo
     if use_gum; then
-        gum style --foreground "#3B82F6" "=== ISO Creation Configuration ==="
-        printf -- "- Flags: %s\n- Installation method: %s\n" "$flags" "$install_method" | gum format
-        gum style --foreground "#3B82F6" "=================================="
+        print_section "ISO Creation - Summary"
+        gum format "* Flags: ${flags}\n* Installation method: ${install_method}"
     else
-        print_info "=== ISO Creation Configuration ==="
-        echo "Flags: $flags"
-        echo "Installation method: $install_method"
-        echo "=================================="
+        print_info "=== ISO Creation Summary ==="
+        echo "• Flags: $flags"
+        echo "• Installation method: $install_method"
+        echo "============================="
     fi
     
     if ask_yes_no "Do you want to create the ISO with these settings?" n; then
@@ -631,7 +647,7 @@ setup_logging
 
 # Main script execution
 main() {
-    print_info "=== Penguins-eggs ISO Creation Script ==="
+    print_section "Penguins-eggs ISO Creation Script"
     print_info "This script will help you create a bootable ISO of your current system"
     echo
      
@@ -640,19 +656,25 @@ main() {
         exit 1
     fi
 
+    print_section "Platform validation"
     validate_platform
     start_sudo_keepalive
 
     # Offer to install gum for a better TUI before further prompts
     ensure_gum_available
 
+    print_section "Preflight checks"
     preflight_checks
+
+    print_section "Optional cleanup and size optimization"
     optimize_size
      
+    print_section "penguins-eggs"
     if ! check_penguins_eggs; then
          install_penguins_eggs
     fi
      
+    print_section "lsb-release detection & configuration"
     if ensure_lsb_release_available; then
          if ! check_lsb_release; then
              configure_lsb_release
@@ -661,7 +683,10 @@ main() {
          print_warning "lsb-release not available. Skipping lsb-release configuration."
     fi
      
+    print_section "Initialize eggs configuration"
     initialize_eggs_config
+
+    print_section "ISO preferences"
     get_user_preferences
      
     print_success "Script completed successfully!"
