@@ -1,4 +1,5 @@
 @echo off
+REM curl -o windows_bypass.bat https://raw.githubusercontent.com/Firstp1ck/Open-Linux-Setup/Other/windows_bypass.bat && windows_bypass.bat
 echo Windows Setup Bypass Script
 echo ==========================
 echo.
