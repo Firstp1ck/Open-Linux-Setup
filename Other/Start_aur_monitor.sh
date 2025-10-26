@@ -3,8 +3,25 @@
 # Requires: libnotify (notify-send) and netcat
 # sudo pacman -S libnotify gnu-netcat
 
-while ! nc -z -w3 aur.archlinux.org 22; do
-    echo "$(date) - AUR SSH is DOWN"
+HOST="aur.archlinux.org"
+PORT=22
+APP_NAME="port-watch"
+
+last_state=""
+while true; do
+    if nc -z -w3 "$HOST" "$PORT"; then
+        current_state="up"
+        if [ "$last_state" = "down" ]; then
+            notify-send -u normal -i network-server -a "$APP_NAME" "AUR SSH is UP" "$HOST:$PORT is accepting connections"
+            echo "$(date) - AUR SSH is UP"
+        fi
+    else
+        current_state="down"
+        if [ "$last_state" != "down" ]; then
+            notify-send -u critical -i network-error -a "$APP_NAME" "AUR SSH is DOWN" "$HOST:$PORT is not accepting connections"
+            echo "$(date) - AUR SSH is DOWN"
+        fi
+    fi
+    last_state="$current_state"
     sleep 60
 done
-notify-send -u normal -i network-server -a port-watch "AUR SSH is UP" "aur.archlinux.org:22 is accepting connections"
