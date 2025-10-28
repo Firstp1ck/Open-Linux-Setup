@@ -15,7 +15,7 @@ set -euo pipefail
 #
 # Notes:
 # - Defaults and behavior:
-#   1) Use --tag or --version if provided; if both are unset, read pkgver from PKGBUILD
+#   1) Use --tag or --version if provided; if both are unset, prompt for version (x.x.x)
 #   2) If only version is known, build tag as TAG_PREFIX+version (default prefix: 'v'); if only tag is known, derive version by stripping TAG_PREFIX
 #   3) Deduce repo from PKGBUILD url (if not given)
 #   4) Download release asset (default name 'Pacsea') and tagged source tarball
@@ -51,7 +51,7 @@ Options:
   -p, --pkgbuild PATH         Path to PKGBUILD (default: ./PKGBUILD or interactive selection under $AUR_BASE; default AUR_BASE: $HOME/aur-packages)
   -r, --repo OWNER/REPO       GitHub repo in owner/repo form (auto-detected from PKGBUILD url if possible)
   -a, --asset NAME            Release asset filename (default: Pacsea)
-  -v, --version X.Y.Z         Version; if TAG is unset, tag = TAG_PREFIX+version (default prefix: 'v')
+  -v, --version X.Y.Z         Version; if TAG is unset, tag = TAG_PREFIX+version (default prefix: 'v'). If neither --version nor --tag is provided, you'll be prompted for version (x.x.x).
   -t, --tag TAG               Exact tag (e.g. v0.4.0); if VERSION is unset, version is derived by stripping TAG_PREFIX
       --tag-prefix PFX        Tag prefix used to build/strip tags (default: v)
       --binary-url URL        Override binary download URL (disables repo/asset inference)
@@ -179,9 +179,13 @@ echo "✅ Using PKGBUILD: $PKGFILE" >&2
 
 # Determine VERSION/TAG
 if [[ -z "${VERSION:-}" && -z "${TAG:-}" ]]; then
-  log_step "Reading pkgver from $PKGFILE"
-  VERSION=$(grep -E '^[[:space:]]*pkgver=' "$PKGFILE" | head -n1 | cut -d '=' -f2 || true)
-  [[ -n "${VERSION:-}" ]] || die "Failed to read pkgver from $PKGFILE. Provide --version or --tag."
+  while true; do
+    read -r -p "Enter version (x.x.x): " VERSION
+    if [[ -n "${VERSION:-}" && "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      break
+    fi
+    echo "Invalid or empty version. Please enter in 'x.x.x' format (e.g. 0.4.5)." >&2
+  done
 fi
 
 # If only VERSION is known, build TAG from it
