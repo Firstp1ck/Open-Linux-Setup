@@ -227,17 +227,26 @@ validate_keyserver() {
 
 validate_package_url() {
   local url="$1"
+  # Trim whitespace
+  url="${url#"${url%%[![:space:]]*}"}"
+  url="${url%"${url##*[![:space:]]}"}"
+  
   # Package URL should be a valid URL
   if [[ ! "$url" =~ ^https?:// ]]; then
     echo "Package URL must start with 'http://' or 'https://'."
     return 1
   fi
   # Should end with .pkg.tar.(zst|xz|gz) or similar
-  if [[ ! "$url" =~ \.(pkg\.tar\.(zst|xz|gz)|tar\.(zst|xz|gz))$ ]]; then
-    echo "Package URL should point to a package file (.pkg.tar.zst, .pkg.tar.xz, .pkg.tar.gz, .tar.zst, .tar.xz, or .tar.gz)."
-    return 1
+  # Check for .pkg.tar.zst, .pkg.tar.xz, .pkg.tar.gz
+  if [[ "$url" =~ \.pkg\.tar\.(zst|xz|gz)$ ]]; then
+    return 0
   fi
-  return 0
+  # Check for .tar.zst, .tar.xz, .tar.gz
+  if [[ "$url" =~ \.tar\.(zst|xz|gz)$ ]]; then
+    return 0
+  fi
+  echo "Package URL should point to a package file (.pkg.tar.zst, .pkg.tar.xz, .pkg.tar.gz, .tar.zst, .tar.xz, or .tar.gz)."
+  return 1
 }
 
 prompt_generic_repo() {
