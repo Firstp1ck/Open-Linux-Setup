@@ -1,9 +1,48 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# ============================================================================
 # Script: update-sha256sums.sh
-# Description: PKGBUILD sha256 checksum updater
-# For full usage and options, run: ./update-sha256sums.sh --help
+# ============================================================================
+# Description:
+#   Automated PKGBUILD checksum updater for Arch Linux AUR packages. Downloads
+#   binary and source artifacts from GitHub releases, computes SHA-256 checksums,
+#   and updates the PKGBUILD file. Supports both interactive and non-interactive
+#   modes for CI/CD workflows.
+#
+# What it does:
+#   - Derives repository, version, and tag from PKGBUILD or user input
+#   - Downloads binary artifact from GitHub releases
+#   - Downloads source tarball from GitHub releases
+#   - Computes SHA-256 checksums for both artifacts
+#   - Updates sha256sums array in PKGBUILD (up to 9 entries)
+#   - Optionally updates .SRCINFO file
+#   - Preserves PKGBUILD formatting
+#   - Performs no-op if checksums are unchanged
+#
+# How to use:
+#   Interactive mode (selects PKGBUILD automatically):
+#     ./update-sha256sums.sh
+#   
+#   Non-interactive mode:
+#     ./update-sha256sums.sh --package NAME --version X.Y.Z --yes
+#   
+#   Options:
+#     -p, --pkgbuild PATH     Path to PKGBUILD
+#     -P, --package NAME      Resolve PKGBUILD at $AUR_BASE/NAME-bin/PKGBUILD
+#     -r, --repo REPO         GitHub repo (OWNER/REPO)
+#     -v, --version X.Y.Z     Version number
+#     -t, --tag TAG           Git tag (e.g., v0.4.0)
+#     -y, --yes               Skip confirmation prompts
+#     -U, --update-srcinfo    Update .SRCINFO after checksum update
+#     -n, --dry-run           Preview without modifying files
+#     -h, --help              Show help message
+#
+# Target:
+#   - AUR package maintainers updating checksums
+#   - CI/CD pipelines automating PKGBUILD updates
+#   - Users maintaining binary AUR packages
+# ============================================================================
 
 # Gum detection
 # HAS_GUM is not used in this script

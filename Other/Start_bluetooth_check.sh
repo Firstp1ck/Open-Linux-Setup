@@ -2,8 +2,35 @@
 
 set -euo pipefail
 
+# ============================================================================
 # Script: Start_bluetooth_check.sh
-# Description: Check and fix Bluetooth module and service issues
+# ============================================================================
+# Description:
+#   Diagnostic and repair tool for Bluetooth connectivity issues. Checks
+#   Bluetooth module status, loads drivers if needed, unblocks Bluetooth if
+#   blocked, and ensures the Bluetooth service is running.
+#
+# What it does:
+#   - Checks if btusb kernel module is loaded, loads it if missing
+#   - Installs bluez-hid2hci package if needed for certain Bluetooth devices
+#   - Checks and unblocks Bluetooth if blocked by rfkill
+#   - Verifies and restarts Bluetooth service (bluetooth.service)
+#   - Provides diagnostic information about Bluetooth status
+#
+# How to use:
+#   Run with appropriate privileges:
+#     ./Start_bluetooth_check.sh
+#     sudo ./Start_bluetooth_check.sh  (if root access needed)
+#   
+#   Options:
+#     --help, -h      Show help message
+#     --dry-run       Preview actions without making changes
+#
+# Target:
+#   - Users experiencing Bluetooth connectivity problems
+#   - Systems with Bluetooth adapters not being detected
+#   - Troubleshooting Bluetooth device pairing issues
+# ============================================================================
 
 # Gum detection
 HAS_GUM=false

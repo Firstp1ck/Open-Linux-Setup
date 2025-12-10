@@ -2,8 +2,36 @@
 
 set -euo pipefail
 
+# ============================================================================
 # Script: Start_restart_wifi.sh
-# Description: Restart WiFi by cycling NetworkManager, dhcpcd, drivers, and interfaces
+# ============================================================================
+# Description:
+#   Comprehensive WiFi restart tool that cycles network components to resolve
+#   connectivity issues. Restarts network managers, reloads WiFi drivers,
+#   unblocks WiFi via rfkill, and brings network interfaces down and up.
+#
+# What it does:
+#   - Restarts NetworkManager service
+#   - Restarts dhcpcd service for the wireless interface (if used)
+#   - Unloads and reloads WiFi kernel drivers (iwlwifi, iwlmvm)
+#   - Blocks and unblocks WiFi using rfkill
+#   - Brings wireless interface down and up
+#   - Identifies wireless interface automatically
+#
+# How to use:
+#   Run with appropriate privileges:
+#     ./Start_restart_wifi.sh
+#     sudo ./Start_restart_wifi.sh  (if root access needed)
+#   
+#   Options:
+#     --help, -h      Show help message
+#     --dry-run       Preview actions without making changes
+#
+# Target:
+#   - Users experiencing WiFi connectivity problems
+#   - Systems with WiFi adapters that need driver reload
+#   - Troubleshooting intermittent WiFi connection issues
+# ============================================================================
 
 # Gum detection
 HAS_GUM=false

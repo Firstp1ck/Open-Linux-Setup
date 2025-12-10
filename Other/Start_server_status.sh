@@ -2,8 +2,35 @@
 
 set -euo pipefail
 
+# ============================================================================
 # Script: Start_server_status.sh
-# Description: Check status of system services and display results in a table
+# ============================================================================
+# Description:
+#   System service status checker that monitors key services and displays
+#   results in a formatted table. Tests service availability, active status,
+#   and configuration validity.
+#
+# What it does:
+#   - Checks status of nginx, xrdp, docker, and NetworkManager services
+#   - Tests nginx configuration validity (nginx -t)
+#   - Displays results in a formatted table with status indicators
+#   - Shows whether services are running, not running, or not installed
+#   - Provides summary of overall service health
+#
+# How to use:
+#   Run directly:
+#     ./Start_server_status.sh
+#   
+#   Options:
+#     --help, -h      Show help message
+#
+#   Requirements: systemctl, gum, nginx (for config test)
+#
+# Target:
+#   - System administrators monitoring service status
+#   - Server administrators checking service health
+#   - Users troubleshooting service issues
+# ============================================================================
 
 # Help function
 print_usage() {

@@ -1,8 +1,42 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# ============================================================================
 # Script: Start_add_repository.sh
-# Description: Add repositories to pacman.conf with validation and key management
+# ============================================================================
+# Description:
+#   Interactive Arch Linux repository manager that adds custom repositories
+#   to pacman.conf with validation, GPG key management, and package
+#   installation. Supports both Include (mirrorlist) and Server URL methods.
+#
+# What it does:
+#   - Adds generic repositories with guided prompts
+#   - Validates repository names, SigLevel, URLs, and paths
+#   - Imports GPG keys from keyservers
+#   - Installs keyring and mirrorlist packages from URLs
+#   - Backs up pacman.conf before modifications
+#   - Supports Include (mirrorlist file) and Server (direct URL) methods
+#   - Includes preset for Chaotic-AUR repository
+#   - Performs full system sync after repository addition
+#
+# How to use:
+#   Run with appropriate privileges:
+#     sudo ./Start_add_repository.sh
+#   
+#   Options:
+#     --help, -h      Show help message
+#     --dry-run       Preview actions without making changes
+#
+#   Menu options:
+#     1) Add generic repository (guided)
+#     2) Add Chaotic-AUR (preset)
+#     3) Quit
+#
+# Target:
+#   - Arch Linux users adding third-party repositories
+#   - Users wanting to add Chaotic-AUR repository
+#   - System administrators managing custom package repositories
+# ============================================================================
 
 # Gum detection
 HAS_GUM=false

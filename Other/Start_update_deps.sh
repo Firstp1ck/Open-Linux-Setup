@@ -2,8 +2,32 @@
 
 set -euo pipefail
 
+# ============================================================================
 # Script: Start_update_deps.sh
-# Description: Check which packages have updates available and show what depends on them
+# ============================================================================
+# Description:
+#   Package update analyzer that shows available updates and their reverse
+#   dependencies. Helps users understand which packages depend on updated
+#   packages before performing system updates.
+#
+# What it does:
+#   - Uses checkupdates to find packages with available updates
+#   - For each updatable package, shows what other packages depend on it
+#   - Displays "Required By" (Benötigt von) information from pacman
+#   - Provides a summary of all packages with pending updates
+#
+# How to use:
+#   Run directly:
+#     ./Start_update_deps.sh
+#   
+#   Options:
+#     --help, -h      Show help message
+#
+# Target:
+#   - Arch Linux users planning system updates
+#   - System administrators reviewing update impact
+#   - Users wanting to understand package dependencies before updating
+# ============================================================================
 
 # Gum detection
 HAS_GUM=false

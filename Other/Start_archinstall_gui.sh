@@ -2,8 +2,37 @@
 
 set -euo pipefail
 
+# ============================================================================
 # Script: Start_archinstall_gui.sh
-# Description: Prepare Arch Linux installation environment with GUI components
+# ============================================================================
+# Description:
+#   Prepares an Arch Linux installation environment with GUI components.
+#   Installs Xorg, XFCE desktop environment, Ly display manager, and Calamares
+#   installer. Configures user accounts, sudo access, and sets up the system
+#   for graphical installation.
+#
+# What it does:
+#   - Checks disk space and remounts cowspace if needed (for live ISO)
+#   - Detects and installs appropriate video drivers (Intel/NVIDIA/AMD)
+#   - Installs Xorg server, XFCE desktop, Ly display manager, and Calamares
+#   - Creates a new user with wheel group membership
+#   - Configures sudo access for the wheel group
+#   - Sets up XFCE as the default session
+#   - Enables and starts the Ly display manager
+#
+# How to use:
+#   Run as root during Arch Linux installation (from live ISO):
+#     sudo ./Start_archinstall_gui.sh
+#   
+#   Options:
+#     --help, -h      Show help message
+#     --dry-run       Preview actions without making changes
+#
+# Target:
+#   - Arch Linux installation media (live ISO)
+#   - Users setting up a graphical installation environment
+#   - System administrators preparing Arch Linux with GUI installer
+# ============================================================================
 
 # Gum detection
 HAS_GUM=false

@@ -2,8 +2,41 @@
 
 set -euo pipefail
 
+# ============================================================================
 # Script: arch_install_02.sh
-# Description: Interactive Arch Linux installation script - chroot configuration
+# ============================================================================
+# Description:
+#   Interactive Arch Linux installation script for chroot configuration phase.
+#   Configures system settings, bootloader, user accounts, and desktop
+#   environment after entering the chroot environment.
+#
+# What it does:
+#   - Configures keyboard layout and timezone
+#   - Sets up locale (UTF-8 and ISO-8859-1)
+#   - Configures hostname
+#   - Enables NetworkManager and NTP
+#   - Sets root password
+#   - Installs and configures GRUB bootloader
+#   - Creates user account with wheel group
+#   - Configures sudo access
+#   - Sets up Hyprland desktop configuration
+#   - Enables SDDM display manager
+#
+# How to use:
+#   Run as root inside chroot environment:
+#     arch-chroot /mnt
+#     /root/Open-Linux-Setup/Other/arch_install_02.sh
+#   
+#   Options:
+#     --help, -h      Show help message
+#
+#   Must be run after arch_install_01.sh completes
+#
+# Target:
+#   - Users completing Arch Linux installation
+#   - System administrators configuring new Arch systems
+#   - Users setting up Hyprland desktop environment
+# ============================================================================
 
 # Colors for output
 RED='\033[0;31m'

@@ -2,8 +2,35 @@
 
 set -euo pipefail
 
+# ============================================================================
 # Script: Start_notify_test.sh
-# Description: Test notification system with different priority levels
+# ============================================================================
+# Description:
+#   Notification system tester that sends test notifications with different
+#   priority levels to verify the desktop notification daemon is working
+#   correctly.
+#
+# What it does:
+#   - Sends low priority notification
+#   - Sends normal priority notification
+#   - Sends critical priority notification
+#   - Verifies each notification was sent successfully
+#   - Reports completion status
+#
+# How to use:
+#   Run directly:
+#     ./Start_notify_test.sh
+#   
+#   Options:
+#     --help, -h      Show help message
+#
+#   Requirements: notify-send (libnotify package)
+#
+# Target:
+#   - Users testing desktop notification functionality
+#   - System administrators verifying notification daemon setup
+#   - Troubleshooting notification system issues
+# ============================================================================
 
 # Gum detection
 HAS_GUM=false

@@ -3,8 +3,42 @@
 set -euo pipefail
 IFS=$'\n\t'
 
+# ============================================================================
 # Script: Start_check_gitea.sh
-# Description: Compare GitHub repositories with Gitea repositories and report migration/mirror status
+# ============================================================================
+# Description:
+#   Repository migration analyzer that compares GitHub and Gitea repositories
+#   to track migration and mirroring status. Generates CSV reports showing
+#   which repositories are migrated, mirrored, or missing on Gitea.
+#
+# What it does:
+#   - Fetches repositories from GitHub (user/org) via API
+#   - Fetches repositories from Gitea instance via API
+#   - Compares repositories by name (case-insensitive)
+#   - Detects mirror status on Gitea
+#   - Generates CSV report with migration status
+#   - Lists missing repositories on Gitea
+#   - Supports filtering by forks and archived status
+#
+# How to use:
+#   Run with required parameters:
+#     ./Start_check_gitea.sh --github-user USER --gitea-user USER --gitea-url URL
+#   
+#   Options:
+#     --github-user USER       GitHub username
+#     --gitea-user USER        Gitea username
+#     --gitea-url URL           Gitea instance URL
+#     --github-token TOKEN      GitHub API token (for private repos)
+#     --gitea-token TOKEN       Gitea API token (for private repos)
+#     --include-forks           Include forked repositories
+#     --exclude-archived        Exclude archived repositories
+#     --help, -h                Show help message
+#
+# Target:
+#   - Users migrating from GitHub to Gitea
+#   - System administrators tracking repository migration
+#   - Organizations managing code repository mirrors
+# ============================================================================
 
 # Gum detection
 HAS_GUM=false

@@ -2,8 +2,37 @@
 
 set -euo pipefail
 
+# ============================================================================
 # Script: Start_download_scripts.sh
-# Description: Download shell scripts from GitHub repositories
+# ============================================================================
+# Description:
+#   Interactive GitHub script downloader. Fetches public repositories from
+#   GitHub, allows selection of .sh scripts, and downloads them with optional
+#   execution. Uses GitHub API and gum for interactive TUI.
+#
+# What it does:
+#   - Prompts for GitHub username
+#   - Fetches list of public repositories via GitHub API
+#   - Allows interactive selection of repository
+#   - Scans repository for .sh shell scripts
+#   - Provides multi-select interface for script selection
+#   - Downloads selected scripts and makes them executable
+#   - Optionally executes downloaded scripts
+#
+# How to use:
+#   Run interactively:
+#     ./Start_download_scripts.sh
+#   
+#   Options:
+#     --help, -h      Show help message
+#
+#   Requirements: jq, curl, gum
+#
+# Target:
+#   - Users wanting to download and use scripts from GitHub
+#   - System administrators managing script collections
+#   - Developers sharing shell scripts via GitHub
+# ============================================================================
 
 # Help function
 print_usage() {

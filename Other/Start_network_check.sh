@@ -2,9 +2,47 @@
 
 set -euo pipefail
 
+# ============================================================================
 # Script: Start_network_check.sh
-# Description: Wi-Fi Diagnostic Script (gum, non-interactive)
-# Runs all checks automatically and prints concise PASS/FAIL with reasons.
+# ============================================================================
+# Description:
+#   Comprehensive Wi-Fi diagnostic tool that runs automatic checks and
+#   reports results with PASS/FAIL indicators. Tests network managers,
+#   RFKill blocks, system logs, drivers, MTU settings, DHCP, and more.
+#
+# What it does:
+#   - Checks for conflicting network managers (NetworkManager, systemd-networkd)
+#   - Tests RFKill block status (hard/soft blocks)
+#   - Analyzes Wi-Fi logs from journalctl for errors
+#   - Checks NetworkManager Wi-Fi specific logs
+#   - Verifies journald persistent logging configuration
+#   - Identifies Wi-Fi driver and adapter via lspci
+#   - Analyzes dmesg for driver errors (ath9k, wlan0)
+#   - Checks MTU settings on wireless interface
+#   - Tests path MTU with fragmentation ping
+#   - Verifies regulatory domain configuration
+#   - Checks DHCP logs (dhcpcd, dhclient)
+#   - Tests NetworkManager service status
+#   - Checks Wi-Fi power management settings
+#   - Analyzes iptables FORWARD chain
+#   - Checks ath9k driver configuration
+#   - Provides summary with pass/warn/fail counts
+#
+# How to use:
+#   Run with appropriate privileges:
+#     ./Start_network_check.sh
+#     sudo ./Start_network_check.sh  (recommended for full diagnostics)
+#   
+#   Options:
+#     --help, -h      Show help message
+#
+#   Requirements: gum, systemctl, iw, rfkill
+#
+# Target:
+#   - Users experiencing Wi-Fi connectivity issues
+#   - Network administrators troubleshooting wireless problems
+#   - System administrators diagnosing network configuration
+# ============================================================================
 
 # Help function
 print_usage() {

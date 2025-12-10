@@ -2,8 +2,34 @@
 
 set -euo pipefail
 
+# ============================================================================
 # Script: Start_ssh_server.sh
-# Description: Connect to SSH server using configuration from system_variables.sh
+# ============================================================================
+# Description:
+#   SSH client wrapper that connects to a remote server using configuration
+#   loaded from system_variables.sh. Supports both standard SSH and Kitty
+#   terminal's SSH integration for enhanced terminal features.
+#
+# What it does:
+#   - Prompts for or accepts path to system_variables.sh configuration file
+#   - Sources SSH connection parameters (SSH_SERVER_IP, SSH_USER)
+#   - Validates configuration file and required variables
+#   - Connects via SSH using standard client or Kitty SSH (if available)
+#   - Handles path resolution (absolute or relative to HOME)
+#
+# How to use:
+#   Run interactively:
+#     ./Start_ssh_server.sh
+#   
+#   Options:
+#     --help, -h          Show help message
+#     --path PATH         Specify path to system_variables.sh directly
+#
+# Target:
+#   - Users connecting to remote servers via SSH
+#   - Systems with SSH server configuration in system_variables.sh
+#   - Kitty terminal users wanting enhanced SSH features
+# ============================================================================
 
 # Gum detection
 HAS_GUM=false

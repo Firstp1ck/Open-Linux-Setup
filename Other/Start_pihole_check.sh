@@ -2,8 +2,34 @@
 
 set -euo pipefail
 
+# ============================================================================
 # Script: Start_pihole_check.sh
-# Description: Check Pi-hole functionality using Charmbracelet gum TUI
+# ============================================================================
+# Description:
+#   Pi-hole DNS and ad blocking verification tool. Tests if Pi-hole DNS
+#   resolution works correctly and verifies that ad-blocking is functioning
+#   by checking if known ad domains are properly blocked.
+#
+# What it does:
+#   - Tests DNS resolution of pi.hole domain
+#   - Verifies ad blocking by checking if flurry.com is blocked
+#   - Displays test results with PASS/FAIL indicators
+#   - Uses gum TUI for formatted output
+#
+# How to use:
+#   Run directly:
+#     ./Start_pihole_check.sh
+#   
+#   Options:
+#     --help, -h      Show help message
+#
+#   Requirements: gum, nslookup
+#
+# Target:
+#   - Pi-hole users verifying DNS and ad-blocking functionality
+#   - Network administrators troubleshooting Pi-hole setup
+#   - Users testing Pi-hole configuration
+# ============================================================================
 
 # Help function
 print_usage() {

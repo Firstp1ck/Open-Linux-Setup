@@ -2,8 +2,35 @@
 
 set -euo pipefail
 
+# ============================================================================
 # Script: Start_user_editor.sh
-# Description: User and access management tool with TUI interface
+# ============================================================================
+# Description:
+#   Interactive user and access management tool with TUI (Terminal User Interface).
+#   Provides a menu-driven interface for creating, deleting, and modifying user
+#   accounts, passwords, and group memberships.
+#
+# What it does:
+#   - Creates new users with password, home directory, and group assignments
+#   - Deletes users and optionally removes their home directories
+#   - Modifies usernames (renames user, home directory, and primary group)
+#   - Changes user passwords
+#   - Manages user group memberships
+#   - Checks for scripts referencing old usernames when renaming
+#   - Configures sudo access for wheel group
+#
+# How to use:
+#   Run as root:
+#     sudo ./Start_user_editor.sh
+#   
+#   Options:
+#     --help, -h      Show help message
+#
+# Target:
+#   - System administrators managing user accounts
+#   - Users needing to rename accounts or manage access
+#   - Multi-user systems requiring user management
+# ============================================================================
 
 # Help function
 print_usage() {

@@ -2,8 +2,37 @@
 
 set -euo pipefail
 
+# ============================================================================
 # Script: Start_ssh_setup.sh
-# Description: Setup SSH server, copy SSH keys to USB, and configure SSH service
+# ============================================================================
+# Description:
+#   Complete SSH server setup tool that detects USB devices, copies SSH keys
+#   to USB for backup, installs OpenSSH server, generates SSH keypairs if
+#   needed, and configures SSH service to start automatically.
+#
+# What it does:
+#   - Detects USB storage devices automatically
+#   - Mounts USB device and copies SSH private key to USB
+#   - Detects Linux distribution and installs OpenSSH server accordingly
+#   - Starts and enables SSH service (sshd or ssh)
+#   - Generates SSH keypair (RSA 4096-bit) if it doesn't exist
+#   - Copies SSH private key to Downloads folder
+#   - Configures proper permissions on .ssh directory
+#
+# How to use:
+#   Run with appropriate privileges:
+#     ./Start_ssh_setup.sh
+#     sudo ./Start_ssh_setup.sh  (if root access needed)
+#   
+#   Options:
+#     --help, -h      Show help message
+#     --skip-usb      Skip USB key copying step
+#
+# Target:
+#   - Users setting up SSH server for remote access
+#   - System administrators configuring SSH access
+#   - Users needing SSH key backup to USB
+# ============================================================================
 
 # Gum detection
 HAS_GUM=false

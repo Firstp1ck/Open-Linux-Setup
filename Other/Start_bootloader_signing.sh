@@ -2,8 +2,39 @@
 
 set -euo pipefail
 
+# ============================================================================
 # Script: Start_bootloader_signing.sh
-# Description: Sign bootloader and kernel for Secure Boot using MOK (Machine Owner Key)
+# ============================================================================
+# Description:
+#   Secure Boot configuration tool that signs bootloader and kernel using
+#   Machine Owner Key (MOK). Enables Secure Boot support on UEFI systems by
+#   generating signing keys, importing them into UEFI firmware, and signing
+#   GRUB and Linux kernel binaries.
+#
+# What it does:
+#   - Generates RSA-2048 signing keys (MOK.key, MOK.crt, MOK.cer)
+#   - Imports public key into UEFI firmware via mokutil
+#   - Signs GRUB EFI binary with sbsigntools
+#   - Signs Linux kernel (vmlinuz-linux) with sbsigntools
+#   - Regenerates GRUB configuration
+#   - Checks Secure Boot status
+#   - Logs all operations to ~/secureboot_sign.log
+#
+# How to use:
+#   Run with root privileges:
+#     sudo ./Start_bootloader_signing.sh
+#   
+#   Options:
+#     --help, -h      Show help message
+#
+#   Important: After first run, reboot and enroll the key in MOK manager,
+#              then re-run the script to complete signing.
+#
+# Target:
+#   - UEFI systems with Secure Boot enabled
+#   - Users wanting to boot signed Linux kernels
+#   - Systems requiring Secure Boot compliance
+# ============================================================================
 
 # Gum detection
 HAS_GUM=false

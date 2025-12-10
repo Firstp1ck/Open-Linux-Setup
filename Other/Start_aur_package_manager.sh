@@ -1,6 +1,43 @@
 #!/usr/bin/env bash
 
-# See Open-Linux-Setup/Documents/aur_package_manager.md for detailed Instructions and Importent Notes.
+# ============================================================================
+# Script: Start_aur_package_manager.sh
+# ============================================================================
+# Description:
+#   Comprehensive AUR package management tool for creating and updating AUR
+#   packages. Provides interactive TUI for package creation, version updates,
+#   PKGBUILD generation, testing, and publishing to AUR. Includes SSH key
+#   management for AUR authentication.
+#
+# What it does:
+#   - Creates new AUR packages with PKGBUILD and .SRCINFO generation
+#   - Updates existing AUR packages with version bumps
+#   - Validates package names, versions, and URLs
+#   - Tests packages with namcap and makepkg
+#   - Manages AUR SSH keys and configuration
+#   - Clones source repositories and selects entry scripts
+#   - Builds and installs packages for testing
+#   - Publishes packages to AUR via Git
+#   - Persists user preferences and last selections
+#
+# How to use:
+#   Run interactively:
+#     ./Start_aur_package_manager.sh
+#   
+#   Options:
+#     --yes, -y           Assume yes to all confirmations
+#     --skip-build        Skip building/testing steps
+#     --dry-run           Preview without executing
+#     --skip-ssh          Skip AUR SSH setup/checks
+#     --help, -h          Show help message
+#
+#   See: Open-Linux-Setup/Documents/aur_package_manager.md for detailed notes
+#
+# Target:
+#   - AUR package maintainers
+#   - Users creating new AUR packages
+#   - Developers publishing software to AUR
+# ============================================================================
 
 # Config paths for persisting defaults
 CONFIG_DIR="$HOME/.config/open-linux-setup"

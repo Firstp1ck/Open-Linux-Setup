@@ -2,8 +2,41 @@
 
 set -euo pipefail
 
+# ============================================================================
 # Script: Start_create_custom_iso.sh
-# Description: Create custom Arch Linux ISO with pre-configured settings
+# ============================================================================
+# Description:
+#   Interactive ISO creation tool using penguins-eggs. Creates bootable Arch
+#   Linux ISO images with pre-configured settings, packages, and user data.
+#   Supports both CLI (krill) and GUI (Calamares) installation methods.
+#
+# What it does:
+#   - Validates platform (Arch/EndeavourOS)
+#   - Checks disk space and memory requirements
+#   - Installs and configures penguins-eggs if needed
+#   - Configures lsb-release for proper distro identification
+#   - Initializes eggs configuration
+#   - Offers size optimizations (cache cleanup, orphan removal)
+#   - Creates ISO with optional features:
+#     * Maximum compression (smaller ISO, longer build time)
+#     * Calamares GUI installer
+#     * Personal data inclusion (clone/cryptedclone)
+#   - Generates bootable ISO in /home/eggs
+#
+# How to use:
+#   Run as regular user (not root):
+#     ./Start_create_custom_iso.sh
+#   
+#   Options:
+#     --help, -h      Show help message
+#
+#   Requirements: penguins-eggs, lsb-release (optional), pacman
+#
+# Target:
+#   - Users creating custom Arch Linux installation media
+#   - System administrators preparing pre-configured ISOs
+#   - Users wanting to backup and restore their system configuration
+# ============================================================================
 
 # Help function
 print_usage() {

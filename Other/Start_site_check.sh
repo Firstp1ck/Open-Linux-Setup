@@ -2,9 +2,43 @@
 
 set -euo pipefail
 
+# ============================================================================
 # Script: Start_site_check.sh
-# Description: Diagnose connectivity to a given host/service
-# Usage: ./Start_site_check.sh
+# ============================================================================
+# Description:
+#   Comprehensive network connectivity diagnostic tool for websites and services.
+#   Performs extensive testing including DNS resolution, ping tests, HTTP/HTTPS
+#   connectivity, routing analysis, and advanced blocking detection mechanisms.
+#
+# What it does:
+#   - DNS resolution testing (A and AAAA records, DNS poisoning detection)
+#   - IPv4 and IPv6 ping connectivity tests
+#   - HTTP/HTTPS connectivity over IPv4 and IPv6
+#   - User-Agent blocking detection
+#   - Response header and body analysis for blocking indicators
+#   - TLS/SSL certificate and version analysis
+#   - Port variation testing (80, 443, 8443)
+#   - Redirect chain analysis
+#   - Connection timing analysis
+#   - Traceroute/MTR network path analysis
+#   - Packet capture analysis (tcpdump)
+#   - Rate limiting detection
+#   - Baseline comparison with known-good sites
+#   - Detects CAPTCHA, geo-blocking, bot detection, VPN blocking
+#
+# How to use:
+#   Run interactively:
+#     ./Start_site_check.sh
+#   
+#   Options:
+#     --help, -h      Show help message
+#
+# Target:
+#   - Network administrators troubleshooting connectivity issues
+#   - Users experiencing website access problems
+#   - Security researchers analyzing blocking mechanisms
+#   - Developers debugging API connectivity
+# ============================================================================
 
 # Help function
 print_usage() {

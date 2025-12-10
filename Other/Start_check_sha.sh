@@ -2,8 +2,37 @@
 
 set -euo pipefail
 
+# ============================================================================
 # Script: Start_check_sha.sh
-# Description: Interactive checksum validator with SHA-1, SHA-256, or SHA-512 support
+# ============================================================================
+# Description:
+#   Interactive file integrity verification tool supporting multiple SHA
+#   algorithms. Compares computed checksums against official/reference
+#   checksums to verify file authenticity and integrity.
+#
+# What it does:
+#   - Supports SHA-1, SHA-256, and SHA-512 algorithms
+#   - Prompts for checksum algorithm selection
+#   - Accepts reference checksum from user
+#   - Validates file path (supports Windows paths in WSL)
+#   - Computes checksum of specified file
+#   - Compares computed vs reference checksum
+#   - Reports MATCH (file intact) or MISMATCH (file corrupted)
+#
+# How to use:
+#   Run interactively:
+#     ./Start_check_sha.sh
+#   
+#   Options:
+#     --help, -h      Show help message
+#
+#   Requirements: sha1sum, sha256sum, or sha512sum (coreutils)
+#
+# Target:
+#   - Users verifying downloaded file integrity
+#   - System administrators checking file authenticity
+#   - Security-conscious users validating software downloads
+# ============================================================================
 
 # Gum detection
 HAS_GUM=false

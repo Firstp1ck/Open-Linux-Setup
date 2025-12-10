@@ -2,8 +2,40 @@
 
 set -euo pipefail
 
+# ============================================================================
 # Script: arch_install_01.sh
-# Description: Interactive Arch Linux installation script - pre-chroot setup
+# ============================================================================
+# Description:
+#   Interactive Arch Linux installation script for pre-chroot setup phase.
+#   Guides users through initial system setup, disk partitioning, filesystem
+#   creation, and base system installation before entering chroot environment.
+#
+# What it does:
+#   - Sets keyboard layout
+#   - Checks system time and EFI firmware
+#   - Tests network connectivity
+#   - Guides disk partitioning with fdisk
+#   - Creates filesystems (Btrfs for root, FAT32 for boot, swap)
+#   - Mounts partitions
+#   - Enables multilib repository
+#   - Installs base system with Hyprland desktop and essential packages
+#   - Generates fstab
+#   - Copies repository to new system for chroot script
+#
+# How to use:
+#   Run as root from Arch Linux installation media:
+#     sudo ./arch_install_01.sh
+#   
+#   Options:
+#     --help, -h      Show help message
+#
+#   After completion, enter chroot and run arch_install_02.sh
+#
+# Target:
+#   - Users performing fresh Arch Linux installations
+#   - System administrators setting up Arch Linux systems
+#   - Users wanting automated installation with Hyprland desktop
+# ============================================================================
 
 # Colors for output
 RED='\033[0;31m'

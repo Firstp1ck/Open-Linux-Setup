@@ -2,8 +2,41 @@
 
 set -euo pipefail
 
+# ============================================================================
 # Script: Start_install_packages.sh
-# Description: Install packages from a file, automatically detecting if they're in official repos or AUR
+# ============================================================================
+# Description:
+#   Intelligent package installer that reads package names from a file and
+#   automatically determines whether each package is available in official
+#   repositories or AUR, then installs them using the appropriate package
+#   manager (pacman or yay).
+#
+# What it does:
+#   - Reads package names from a text file (one per line)
+#   - Checks if each package exists in official repositories (pacman)
+#   - Checks if each package exists in AUR (yay)
+#   - Categorizes packages into official, AUR, or unknown
+#   - Installs official packages with pacman
+#   - Installs AUR packages with yay
+#   - Skips unknown packages with warning
+#   - Supports dry-run mode for preview
+#
+# How to use:
+#   Run with package file:
+#     ./Start_install_packages.sh packages.txt
+#   
+#   Options:
+#     --help, -h          Show help message
+#     --dry-run           Preview without installing
+#     --pacman-only       Only install from official repos
+#     --aur-only          Only install from AUR
+#     --skip-unknown      Skip packages not found in any repo
+#
+# Target:
+#   - Users installing packages from lists
+#   - System administrators bulk-installing packages
+#   - Users migrating package lists between systems
+# ============================================================================
 
 # Gum detection
 HAS_GUM=false

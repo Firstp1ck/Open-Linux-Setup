@@ -2,8 +2,39 @@
 
 set -euo pipefail
 
+# ============================================================================
 # Script: Start_check_orphans.sh
-# Description: Check for orphaned packages and group them by usage, with option to remove unused ones
+# ============================================================================
+# Description:
+#   Orphaned package analyzer that identifies dependencies no longer needed
+#   and groups them by which explicitly installed packages still use them.
+#   Provides option to safely remove unused orphaned packages.
+#
+# What it does:
+#   - Identifies orphaned packages (dependencies no longer required)
+#   - Groups orphaned packages by explicitly installed packages that use them
+#   - Separates unused orphaned packages (not used by any explicit package)
+#   - Displays pacman logs for orphaned packages
+#   - Provides option to remove unused orphaned packages
+#   - Uses pactree to analyze reverse dependencies
+#
+# How to use:
+#   Run with appropriate privileges:
+#     ./Start_check_orphans.sh
+#     sudo ./Start_check_orphans.sh  (for removal)
+#   
+#   Options:
+#     --help, -h      Show help message
+#     --dry-run       Preview removal without executing
+#     --yes, -y       Assume yes to removal prompts
+#
+#   Requirements: pacman, pactree (pacman-contrib)
+#
+# Target:
+#   - Arch Linux users cleaning up unused dependencies
+#   - System administrators maintaining clean package installations
+#   - Users wanting to free up disk space
+# ============================================================================
 
 # Gum detection
 HAS_GUM=false
