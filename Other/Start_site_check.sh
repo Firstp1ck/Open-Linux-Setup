@@ -1,11 +1,48 @@
 #!/usr/bin/env bash
-#
-# netcheck.sh - diagnose connectivity to a given host/service
-# Usage: ./netcheck.sh
-#
-# Requires: bash, gum, ping, dig, curl, traceroute or tracepath
 
-set -u
+set -euo pipefail
+
+# Script: Start_site_check.sh
+# Description: Diagnose connectivity to a given host/service
+# Usage: ./Start_site_check.sh
+
+# Help function
+print_usage() {
+    cat <<EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Description:
+    Comprehensive network connectivity diagnostic tool. Checks DNS resolution,
+    ping connectivity, HTTP/HTTPS access, traceroute, and detects various
+    blocking mechanisms.
+
+Options:
+    --help, -h          Show this help message
+
+Examples:
+    $(basename "$0")
+
+Requires: bash, gum, ping, dig, curl, traceroute or tracepath
+
+EOF
+}
+
+# Parse arguments
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --help|-h)
+            print_usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            print_usage
+            exit 1
+            ;;
+    esac
+    # shellcheck disable=SC2317
+    shift
+done
 
 TIMEOUT_CONNECT=10
 PING_COUNT=3

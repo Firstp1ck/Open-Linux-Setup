@@ -1,16 +1,56 @@
 #!/usr/bin/env bash
 
+set -euo pipefail
+
+# Script: Start_server_status.sh
+# Description: Check status of system services and display results in a table
+
+# Help function
+print_usage() {
+    cat <<EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Description:
+    Check status of system services (nginx, xrdp, docker, NetworkManager) and
+    display results in a formatted table. Also tests nginx configuration.
+
+Options:
+    --help, -h          Show this help message
+
+Examples:
+    $(basename "$0")
+
+EOF
+}
+
+# Parse arguments
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --help|-h)
+            print_usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            print_usage
+            exit 1
+            ;;
+    esac
+    # shellcheck disable=SC2317
+    shift
+done
+
 # Services to check
 services=("nginx" "xrdp" "docker" "NetworkManager.service")
 
 # Requirements checks
 if ! command -v systemctl >/dev/null 2>&1; then
-    echo "systemctl is required (systemd)." >&2
+    echo "Error: systemctl is required (systemd)." >&2
     exit 1
 fi
 
 if ! command -v gum >/dev/null 2>&1; then
-    echo "This script requires 'gum'. Install from https://github.com/charmbracelet/gum and re-run." >&2
+    echo "Error: This script requires 'gum'. Install from https://github.com/charmbracelet/gum and re-run." >&2
     exit 1
 fi
 

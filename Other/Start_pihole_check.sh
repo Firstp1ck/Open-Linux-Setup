@@ -1,10 +1,48 @@
 #!/usr/bin/env bash
 
-# Script to check Pi-hole functionality using Charmbracelet gum TUI
+set -euo pipefail
+
+# Script: Start_pihole_check.sh
+# Description: Check Pi-hole functionality using Charmbracelet gum TUI
+
+# Help function
+print_usage() {
+    cat <<EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Description:
+    Test Pi-hole DNS resolution and ad blocking functionality. Checks if
+    pi.hole resolves correctly and if flurry.com is properly blocked.
+
+Options:
+    --help, -h          Show this help message
+
+Examples:
+    $(basename "$0")
+
+EOF
+}
+
+# Parse arguments
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --help|-h)
+            print_usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            print_usage
+            exit 1
+            ;;
+    esac
+    # shellcheck disable=SC2317
+    shift
+done
 
 # Ensure gum is installed
 if ! command -v gum >/dev/null 2>&1; then
-    echo "gum is required for this script. Install from: https://github.com/charmbracelet/gum"
+    echo "Error: gum is required for this script. Install from: https://github.com/charmbracelet/gum" >&2
     exit 2
 fi
 

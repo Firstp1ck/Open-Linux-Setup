@@ -2,6 +2,15 @@
 
 set -euo pipefail
 
+# Script: Start_install_packages.sh
+# Description: Install packages from a file, automatically detecting if they're in official repos or AUR
+
+# Gum detection
+HAS_GUM=false
+if command -v gum >/dev/null 2>&1; then
+    HAS_GUM=true
+fi
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -9,9 +18,44 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Help function
+print_usage() {
+    cat <<EOF
+Usage: $(basename "$0") [OPTIONS] [PACKAGE_FILE]
+
+Description:
+    Install packages from a file, automatically detecting if they're in official
+    repositories or AUR. Categorizes packages and installs them using the
+    appropriate package manager (pacman or yay).
+
+Arguments:
+    PACKAGE_FILE        Path to file containing package names (one per line)
+
+Options:
+    --help, -h          Show this help message
+
+Examples:
+    $(basename "$0") packages.txt
+
+EOF
+}
+
+# Parse arguments
+# Note: Package file is handled in main() function
+
 # Function to print colored messages
 print_message() {
-    echo -e "${2}${1}${NC}"
+    if [ "$HAS_GUM" = true ] && [ "$2" = "$GREEN" ]; then
+        gum style --foreground 42 "$1"
+    elif [ "$HAS_GUM" = true ] && [ "$2" = "$RED" ]; then
+        gum style --foreground 196 "$1"
+    elif [ "$HAS_GUM" = true ] && [ "$2" = "$YELLOW" ]; then
+        gum style --foreground 214 "$1"
+    elif [ "$HAS_GUM" = true ] && [ "$2" = "$BLUE" ]; then
+        gum style --foreground 63 "$1"
+    else
+        echo -e "${2}${1}${NC}"
+    fi
 }
 
 # Function to print section headers

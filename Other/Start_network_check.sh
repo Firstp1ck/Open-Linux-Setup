@@ -1,11 +1,50 @@
 #!/usr/bin/env bash
 
-# Wi-Fi Diagnostic Script (gum, non-interactive)
+set -euo pipefail
+
+# Script: Start_network_check.sh
+# Description: Wi-Fi Diagnostic Script (gum, non-interactive)
 # Runs all checks automatically and prints concise PASS/FAIL with reasons.
+
+# Help function
+print_usage() {
+    cat <<EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Description:
+    Comprehensive Wi-Fi diagnostic script that checks network managers, RFKill
+    blocks, logs, drivers, MTU settings, DHCP, and more. Runs all checks
+    automatically and prints concise PASS/FAIL results with reasons.
+
+Options:
+    --help, -h          Show this help message
+
+Examples:
+    $(basename "$0")
+
+EOF
+}
+
+# Parse arguments
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --help|-h)
+            print_usage
+            exit 0
+            ;;
+        *)
+            echo "[ERROR] Unknown option: $1" >&2
+            print_usage
+            exit 1
+            ;;
+    esac
+    # shellcheck disable=SC2317
+    shift
+done
 
 # --- Prerequisites & Notices ---
 if ! command -v gum >/dev/null 2>&1; then
-    echo "[ERROR] This script requires 'gum'. Install it (e.g., 'pacman -S gum' or 'brew install gum') and rerun."
+    echo "[ERROR] This script requires 'gum'. Install it (e.g., 'pacman -S gum' or 'brew install gum') and rerun." >&2
     exit 1
 fi
 
@@ -170,7 +209,7 @@ check_mtu() {
 check_fragmentation_ping() {
     local ping_test
     ping_test=$(ping -c 4 -M "do" -s 1472 8.8.8.8 2>&1)
-    if [ $? -eq 0 ]; then
+    if ping -c 4 -M "do" -s 1472 8.8.8.8 >/dev/null 2>&1; then
         print_result "Fragmentation test (ping 8.8.8.8)" "PASS" "Path MTU OK"
     else
         local summary
@@ -229,8 +268,7 @@ check_wifi_power_save() {
     wifi_interface=$(get_wifi_interface)
     if [ -n "$wifi_interface" ]; then
         local powersave_status
-        powersave_status=$(iw dev "$wifi_interface" get power_save 2>&1)
-        if [ $? -eq 0 ]; then
+        if powersave_status=$(iw dev "$wifi_interface" get power_save 2>&1); then
             local mode
             mode=$(echo "$powersave_status" | awk '{print $NF}')
             print_result "Wi-Fi power management" "PASS" "$wifi_interface power_save=$mode"

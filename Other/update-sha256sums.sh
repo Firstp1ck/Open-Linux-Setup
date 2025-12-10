@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# PKGBUILD sha256 checksum updater.
+# Script: update-sha256sums.sh
+# Description: PKGBUILD sha256 checksum updater
 # For full usage and options, run: ./update-sha256sums.sh --help
+
+# Gum detection
+# HAS_GUM is not used in this script
 
 #############################################
 # Defaults
@@ -382,7 +386,7 @@ fi
 # If only TAG is known, derive VERSION from it (strip TAG_PREFIX if present)
 if [[ -z "${VERSION:-}" && -n "${TAG:-}" ]]; then
   if [[ -n "${TAG_PREFIX:-}" && "$TAG" == ${TAG_PREFIX}* ]]; then
-    VERSION="${TAG#${TAG_PREFIX}}"
+    VERSION="${TAG#"${TAG_PREFIX}"}"
   else
     VERSION="${TAG}"
   fi
@@ -675,8 +679,7 @@ existing_list=$(awk -v start="$sha_line" -v var="${sha_var}" '
     }
   }
 ' "$PKGFILE")
-existing_1=$(printf "%s\n" "$existing_list" | sed -n '1p')
-existing_2=$(printf "%s\n" "$existing_list" | sed -n '2p')
+# existing_1 and existing_2 are not needed - we access the list directly via loop
 
 # Skip if unchanged
 unchanged=false

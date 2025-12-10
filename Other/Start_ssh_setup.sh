@@ -1,161 +1,302 @@
 #!/usr/bin/env bash
 
+set -euo pipefail
+
+# Script: Start_ssh_setup.sh
+# Description: Setup SSH server, copy SSH keys to USB, and configure SSH service
+
+# Gum detection
+HAS_GUM=false
+if command -v gum >/dev/null 2>&1; then
+    HAS_GUM=true
+fi
+
+# Standard message functions
+msg_info() {
+    if [ "$HAS_GUM" = true ]; then
+        gum style --foreground 63 "[INFO] $1"
+    else
+        echo "[INFO] $1"
+    fi
+}
+
+msg_success() {
+    if [ "$HAS_GUM" = true ]; then
+        gum style --foreground 42 "[SUCCESS] $1"
+    else
+        echo "[SUCCESS] $1"
+    fi
+}
+
+msg_error() {
+    if [ "$HAS_GUM" = true ]; then
+        gum style --foreground 196 "[ERROR] $1" >&2
+    else
+        echo "[ERROR] $1" >&2
+    fi
+}
+
+msg_warning() {
+    if [ "$HAS_GUM" = true ]; then
+        gum style --foreground 214 "[WARNING] $1"
+    else
+        echo "[WARNING] $1"
+    fi
+}
+
+# Dependency checking
+require_command() {
+    local cmd="$1"
+    local install_hint="${2:-Install it via your package manager}"
+    
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        msg_error "'$cmd' is required but not installed."
+        echo "Hint: $install_hint" >&2
+        exit 1
+    fi
+}
+
+# Help function
+print_usage() {
+    cat <<EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Description:
+    Setup SSH server by detecting USB device, copying SSH keys to USB,
+    installing OpenSSH server, and configuring SSH service. Also generates
+    SSH keypair if it doesn't exist.
+
+Options:
+    --help, -h          Show this help message
+    --skip-usb          Skip USB key copying step
+
+Examples:
+    $(basename "$0")
+    $(basename "$0") --skip-usb
+
+Note: This script requires sudo privileges for some operations.
+
+EOF
+}
+
+# Parse arguments
+SKIP_USB=0
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --help|-h)
+            print_usage
+            exit 0
+            ;;
+        --skip-usb)
+            SKIP_USB=1
+            ;;
+        *)
+            msg_error "Unknown option: $1"
+            print_usage
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+# Check dependencies
+require_command "lsblk" "Install util-linux package"
+require_command "systemctl" "This script requires systemd"
+
+# Check for sudo if needed
+# shellcheck disable=SC2329
+check_sudo() {
+    if [ "$EUID" -ne 0 ]; then
+        if ! command -v sudo >/dev/null 2>&1; then
+            msg_error "This script requires sudo privileges. Install sudo or run as root."
+            exit 1
+        fi
+    fi
+}
+
+run_as_root() {
+    if [ "$EUID" -eq 0 ]; then
+        "$@"
+    else
+        sudo "$@"
+    fi
+}
+
 # === Step 1: Detect USB device ===
-echo "[INFO] Detecting USB device..."
-DEVICE=$(lsblk -pno NAME,TRAN | awk '$2=="usb"{print $1}' | head -n 1)
-if [ -z "$DEVICE" ]; then
-  echo "[ERROR] No USB device detected. Please insert a USB stick and try again."
-  exit 1
-else
-  echo "[OK] USB device detected: $DEVICE"
-fi
+if [ "$SKIP_USB" -eq 0 ]; then
+    msg_info "Detecting USB device..."
+    DEVICE=$(lsblk -pno NAME,TRAN 2>/dev/null | awk '$2=="usb"{print $1}' | head -n 1 || true)
+    
+    if [ -z "$DEVICE" ]; then
+        msg_error "No USB device detected. Please insert a USB stick and try again."
+        exit 1
+    else
+        msg_success "USB device detected: $DEVICE"
+    fi
 
-# Find the first partition on the device (e.g., /dev/sdb1)
-PARTITION="${DEVICE}1"
-echo "[INFO] Checking for partition: $PARTITION..."
-if ! lsblk | grep -q "$(basename "$PARTITION")"; then
-  echo "[ERROR] Partition $PARTITION not found. Please check your USB stick."
-  exit 1
-else
-  echo "[OK] Partition found: $PARTITION"
-fi
+    # Find the first partition on the device (e.g., /dev/sdb1)
+    PARTITION="${DEVICE}1"
+    msg_info "Checking for partition: $PARTITION..."
+    if ! lsblk | grep -q "$(basename "$PARTITION")"; then
+        msg_error "Partition $PARTITION not found. Please check your USB stick."
+        exit 1
+    else
+        msg_success "Partition found: $PARTITION"
+    fi
 
-# === Step 2: Mount the USB partition ===
-MOUNTPOINT="/mnt/usb"
-echo "[INFO] Mounting $PARTITION to $MOUNTPOINT..."
-sudo mkdir -p "$MOUNTPOINT"
-if sudo mount "$PARTITION" "$MOUNTPOINT"; then
-  echo "[OK] Mounted $PARTITION at $MOUNTPOINT."
-else
-  echo "[ERROR] Failed to mount $PARTITION."
-  exit 1
-fi
+    # === Step 2: Mount the USB partition ===
+    MOUNTPOINT="/mnt/usb"
+    msg_info "Mounting $PARTITION to $MOUNTPOINT..."
+    run_as_root mkdir -p "$MOUNTPOINT"
+    if run_as_root mount "$PARTITION" "$MOUNTPOINT"; then
+        msg_success "Mounted $PARTITION at $MOUNTPOINT."
+    else
+        msg_error "Failed to mount $PARTITION."
+        exit 1
+    fi
 
-# === Step 3: Copy the key file ===
-KEY_FILE="$HOME/.ssh/id_rsa"
-echo "[INFO] Checking for SSH private key at $KEY_FILE..."
-if [ ! -f "$KEY_FILE" ]; then
-  echo "[ERROR] SSH private key not found: $KEY_FILE"
-  sudo umount "$MOUNTPOINT"
-  exit 1
-else
-  echo "[OK] SSH private key found. Copying to USB..."
-fi
+    # === Step 3: Copy the key file ===
+    KEY_FILE="$HOME/.ssh/id_rsa"
+    msg_info "Checking for SSH private key at $KEY_FILE..."
+    if [ ! -f "$KEY_FILE" ]; then
+        msg_warning "SSH private key not found: $KEY_FILE"
+        msg_info "SSH key will be generated later in the script."
+    else
+        msg_success "SSH private key found. Copying to USB..."
+        if cp "$KEY_FILE" "$MOUNTPOINT/"; then
+            msg_success "SSH private key copied to USB stick ($MOUNTPOINT)"
+        else
+            msg_error "Failed to copy SSH private key to USB stick."
+            run_as_root umount "$MOUNTPOINT" || true
+            exit 1
+        fi
+    fi
 
-if cp "$KEY_FILE" "$MOUNTPOINT/"; then
-  echo "[OK] SSH private key copied to USB stick ($MOUNTPOINT)"
+    # === Step 4: Optionally unmount USB after copying ===
+    msg_info "Unmounting USB stick..."
+    if run_as_root umount "$MOUNTPOINT"; then
+        msg_success "USB stick unmounted. You can now safely remove it."
+    else
+        msg_warning "Failed to unmount USB stick. Please unmount manually if needed."
+    fi
 else
-  echo "[ERROR] Failed to copy SSH private key to USB stick."
-  sudo umount "$MOUNTPOINT"
-  exit 1
-fi
-
-# === Step 4: Optionally unmount USB after copying ===
-echo "[INFO] Unmounting USB stick..."
-if sudo umount "$MOUNTPOINT"; then
-  echo "[OK] USB stick unmounted. You can now safely remove it."
-else
-  echo "[WARNING] Failed to unmount USB stick. Please unmount manually if needed."
+    msg_info "Skipping USB key copying step (--skip-usb specified)."
 fi
 
 # === Step 5: Detect Linux distribution and install OpenSSH server accordingly ===
-if [ -f /etc/os-release ]; then
-  . /etc/os-release
-  DISTRO_ID=$ID
-else
-  echo "[ERROR] /etc/os-release not found. Cannot determine Linux distribution."
-  exit 1
+if [ ! -f /etc/os-release ]; then
+    msg_error "/etc/os-release not found. Cannot determine Linux distribution."
+    exit 1
 fi
+
+# shellcheck disable=SC1091
+. /etc/os-release
+DISTRO_ID=$ID
 
 INSTALL_CMD=""
 SERVICE_NAME=""
 
 case "$DISTRO_ID" in
-  arch|manjaro|endeavouros|cachyos)
-    INSTALL_CMD="sudo pacman -Syu --noconfirm openssh"
-    SERVICE_NAME="sshd"
-    ;;
-  debian|ubuntu|linuxmint|pop|mint)
-    INSTALL_CMD="sudo apt-get update && sudo apt-get install -y openssh-server"
-    SERVICE_NAME="ssh"
-    ;;
-  fedora|bazzite|nobara)
-    INSTALL_CMD="sudo dnf install -y openssh-server"
-    SERVICE_NAME="sshd"
-    ;;
-  *)
-    echo "[ERROR] Unsupported or unrecognized Linux distribution: $DISTRO_ID"
-    exit 1
-    ;;
+    arch|manjaro|endeavouros|cachyos)
+        INSTALL_CMD="pacman -Syu --noconfirm openssh"
+        SERVICE_NAME="sshd"
+        ;;
+    debian|ubuntu|linuxmint|pop|mint)
+        INSTALL_CMD="apt-get update && apt-get install -y openssh-server"
+        SERVICE_NAME="ssh"
+        ;;
+    fedora|bazzite|nobara)
+        INSTALL_CMD="dnf install -y openssh-server"
+        SERVICE_NAME="sshd"
+        ;;
+    *)
+        msg_error "Unsupported or unrecognized Linux distribution: $DISTRO_ID"
+        exit 1
+        ;;
 esac
 
 # === Step 6: Install OpenSSH server (if not already installed) ===
-echo "[INFO] Checking if OpenSSH server is installed..."
+msg_info "Checking if OpenSSH server is installed..."
 if ! command -v sshd >/dev/null 2>&1; then
-  echo "[INFO] Installing OpenSSH server..."
-  eval "$INSTALL_CMD"
-  if [ $? -eq 0 ]; then
-    echo "[OK] OpenSSH server installed."
-  else
-    echo "[ERROR] Failed to install OpenSSH server."
-    exit 1
-  fi
+    msg_info "Installing OpenSSH server..."
+    if [ "$EUID" -eq 0 ]; then
+        if eval "$INSTALL_CMD"; then
+            msg_success "OpenSSH server installed."
+        else
+            msg_error "Failed to install OpenSSH server."
+            exit 1
+        fi
+    else
+        if command -v sudo >/dev/null 2>&1; then
+            if sudo bash -c "$INSTALL_CMD"; then
+                msg_success "OpenSSH server installed."
+            else
+                msg_error "Failed to install OpenSSH server."
+                exit 1
+            fi
+        else
+            msg_error "This operation requires root privileges."
+            exit 1
+        fi
+    fi
 else
-  echo "[OK] OpenSSH server is already installed."
+    msg_success "OpenSSH server is already installed."
 fi
 
 # === Step 7: Start SSH service and enable it to start at boot ===
-echo "[INFO] Starting SSH service and enabling it to start at boot..."
-sudo systemctl enable $SERVICE_NAME
-sudo systemctl start $SERVICE_NAME
-if [ $? -eq 0 ]; then
-  echo "[OK] SSH service started and enabled."
+msg_info "Starting SSH service and enabling it to start at boot..."
+run_as_root systemctl enable "$SERVICE_NAME"
+if run_as_root systemctl start "$SERVICE_NAME"; then
+    msg_success "SSH service started and enabled."
 else
-  echo "[ERROR] Failed to start SSH service."
-  exit 1
+    msg_error "Failed to start SSH service."
+    exit 1
 fi
 
 # === Step 8: Generate SSH keypair (defaults to ~/.ssh/id_rsa and ~/.ssh/id_rsa.pub) ===
 KEY_COMMENT="${USER}@$(hostname)"
 KEY_FILE="$HOME/.ssh/id_rsa"
-echo "[INFO] Checking for existing SSH key at $KEY_FILE..."
+msg_info "Checking for existing SSH key at $KEY_FILE..."
+
+# Ensure .ssh directory exists
+mkdir -p "$HOME/.ssh"
+chmod 700 "$HOME/.ssh"
+
 if [ -f "$KEY_FILE" ]; then
-  echo "[OK] An SSH key already exists at $KEY_FILE. Skipping generation."
+    msg_success "An SSH key already exists at $KEY_FILE. Skipping generation."
 else
-  echo "[INFO] Generating SSH keypair..."
-  ssh-keygen -t rsa -b 4096 -C "$KEY_COMMENT" -N "" -f "$KEY_FILE"
-  if [ $? -eq 0 ]; then
-    echo "[OK] SSH keypair generated."
-  else
-    echo "[ERROR] Failed to generate SSH keypair."
-    exit 1
-  fi
+    msg_info "Generating SSH keypair..."
+    if ssh-keygen -t rsa -b 4096 -C "$KEY_COMMENT" -N "" -f "$KEY_FILE"; then
+        msg_success "SSH keypair generated."
+    else
+        msg_error "Failed to generate SSH keypair."
+        exit 1
+    fi
 fi
 
 # === Step 9: Copy private key to Downloads folder ===
 # Check if Downloads folder exists
 DOWNLOADS_DIR="$HOME/Downloads"
-echo "[INFO] Checking for Downloads folder at $DOWNLOADS_DIR..."
+msg_info "Checking for Downloads folder at $DOWNLOADS_DIR..."
 if [ ! -d "$DOWNLOADS_DIR" ]; then
-  echo "[WARNING] Downloads folder ($DOWNLOADS_DIR) does not exist. It will be created later if needed."
-fi
-if [ ! -d "$DOWNLOADS_DIR" ]; then
-  echo "[INFO] Creating Downloads folder at $DOWNLOADS_DIR..."
-  mkdir -p "$DOWNLOADS_DIR"
-  if [ $? -eq 0 ]; then
-    echo "[OK] Downloads folder created."
-  else
-    echo "[ERROR] Failed to create Downloads folder."
-    exit 1
-  fi
+    msg_info "Creating Downloads folder at $DOWNLOADS_DIR..."
+    if mkdir -p "$DOWNLOADS_DIR"; then
+        msg_success "Downloads folder created."
+    else
+        msg_error "Failed to create Downloads folder."
+        exit 1
+    fi
 fi
 
-echo "[INFO] Copying SSH private key to $DOWNLOADS_DIR..."
+msg_info "Copying SSH private key to $DOWNLOADS_DIR..."
 if cp "$KEY_FILE" "$DOWNLOADS_DIR/"; then
-  echo "[OK] SSH private key copied to $DOWNLOADS_DIR/"
+    msg_success "SSH private key copied to $DOWNLOADS_DIR/"
 else
-  echo "[ERROR] Failed to copy SSH private key to $DOWNLOADS_DIR/"
-  exit 1
+    msg_error "Failed to copy SSH private key to $DOWNLOADS_DIR/"
+    exit 1
 fi
 
-echo "[SUCCESS] SSH server setup completed."
+msg_success "SSH server setup completed."
+
+exit 0

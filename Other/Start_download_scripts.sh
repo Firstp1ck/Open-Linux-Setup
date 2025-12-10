@@ -1,6 +1,44 @@
 #!/usr/bin/env bash
 
-set -e
+set -euo pipefail
+
+# Script: Start_download_scripts.sh
+# Description: Download shell scripts from GitHub repositories
+
+# Help function
+print_usage() {
+    cat <<EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Description:
+    Interactive tool to download shell scripts from GitHub repositories.
+    Fetches public repositories, allows selection, and downloads .sh files.
+
+Options:
+    --help, -h          Show this help message
+
+Examples:
+    $(basename "$0")
+
+EOF
+}
+
+# Parse arguments
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --help|-h)
+            print_usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            print_usage
+            exit 1
+            ;;
+    esac
+    # shellcheck disable=SC2317
+    shift
+done
 
 # Dependencies check
 missing_deps=()

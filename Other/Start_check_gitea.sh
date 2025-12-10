@@ -1,33 +1,69 @@
 #!/usr/bin/env bash
-# Compare GitHub repositories with Gitea repositories and report migration/mirror status
-#
-# Requirements:
-# - bash, curl, jq
-#
-# Usage examples:
-# Start_check_gitea.sh \
-# --github-user "<USERNAME>" \
-# --gitea-user  "<USERNAME>" \
-# --gitea-url   "<GITEA_URL>" \
-# --github-token-file "$HOME/Path/To/Github_PAT.token" \
-# --gitea-token-file  "$HOME/Path/To/Gitea_PAT.token" \
-# --include-forks
-#
-# Start_check_gitea.sh \
-#   --github-org "<github_org>" \
-#   --gitea-org  "<gitea_org>" \
-#   --gitea-url  "https://gitea.example.local" \
-#   --github-token "$GITHUB_TOKEN" \
-#   --gitea-token  "$GITEA_TOKEN"
-#
-# Notes:
-# - Use Personal Access Tokens (single-line), NOT SSH keys. Do not point to id_ed25519 files.
-# - If a GitHub token is provided, private repos can be included.
-# - If a Gitea token is provided, private repos can be included.
-# - Mirror detection on Gitea is best-effort: uses the "mirror" boolean when present in the API response.
 
 set -euo pipefail
 IFS=$'\n\t'
+
+# Script: Start_check_gitea.sh
+# Description: Compare GitHub repositories with Gitea repositories and report migration/mirror status
+
+# Gum detection
+HAS_GUM=false
+if command -v gum >/dev/null 2>&1; then
+    HAS_GUM=true
+fi
+
+# Help function
+print_usage() {
+    cat <<EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Description:
+    Compare GitHub repositories with Gitea repositories and report migration/mirror status.
+    Generates reports showing which repositories are migrated, mirrored, or missing.
+
+Options:
+    --help, -h                  Show this help message
+    --github-user USER          GitHub username
+    --gitea-user USER           Gitea username
+    --github-org ORG            GitHub organization
+    --gitea-org ORG             Gitea organization
+    --gitea-url URL             Gitea instance URL (e.g., https://gitea.example.local)
+    --github-token TOKEN        GitHub personal access token
+    --gitea-token TOKEN         Gitea personal access token
+    --github-token-file FILE    Path to file containing GitHub token
+    --gitea-token-file FILE     Path to file containing Gitea token
+    --include-forks             Include forked repositories
+    --exclude-archived          Exclude archived repositories
+
+Examples:
+    $(basename "$0") \\
+        --github-user "username" \\
+        --gitea-user "username" \\
+        --gitea-url "https://gitea.example.local" \\
+        --github-token-file "\$HOME/.github_token" \\
+        --gitea-token-file "\$HOME/.gitea_token" \\
+        --include-forks
+
+Notes:
+    - Use Personal Access Tokens (single-line), NOT SSH keys
+    - If a GitHub token is provided, private repos can be included
+    - If a Gitea token is provided, private repos can be included
+    - Mirror detection on Gitea is best-effort
+
+Requirements: bash, curl, jq
+
+EOF
+}
+
+# Parse arguments - check for help first
+for arg in "$@"; do
+    case "$arg" in
+        --help|-h)
+            print_usage
+            exit 0
+            ;;
+    esac
+done
 
 # --------------- Defaults / Config ---------------
 GITHUB_API_BASE=${GITHUB_API_BASE:-"https://api.github.com"}
@@ -55,9 +91,29 @@ REPORT_DIR=${REPORT_DIR:-"$REPORT_DIR_DEFAULT"}
 mkdir -p "$REPORT_DIR"
 
 # --------------- Helpers ---------------
-error() { echo "[ERROR] $*" >&2; }
-info()  { echo "[INFO]  $*" >&2; }
-warn()  { echo "[WARN]  $*" >&2; }
+error() {
+    if [ "$HAS_GUM" = true ]; then
+        gum style --foreground 196 "[ERROR] $*" >&2
+    else
+        echo "[ERROR] $*" >&2
+    fi
+}
+
+info() {
+    if [ "$HAS_GUM" = true ]; then
+        gum style --foreground 63 "[INFO]  $*"
+    else
+        echo "[INFO]  $*"
+    fi
+}
+
+warn() {
+    if [ "$HAS_GUM" = true ]; then
+        gum style --foreground 214 "[WARN]  $*"
+    else
+        echo "[WARN]  $*"
+    fi
+}
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || { error "Missing dependency: $1"; exit 2; }
@@ -468,7 +524,7 @@ missing_list="$(jq -r \
 if [[ -n "$missing_list" ]]; then
   echo
   info "Missing on Gitea (by repo name):"
-  echo "$missing_list" | sed 's/^/  - /'
+  echo "$missing_list" | while IFS= read -r line; do echo "  - $line"; done
 fi
 
 exit 0

@@ -1,11 +1,90 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DRY_RUN=0
-if [[ "${1:-}" == "--dry-run" ]]; then
-  DRY_RUN=1
-  echo "Running in DRY RUN mode: No changes will be made."
+# Script: Start_add_repository.sh
+# Description: Add repositories to pacman.conf with validation and key management
+
+# Gum detection
+HAS_GUM=false
+if command -v gum >/dev/null 2>&1; then
+    HAS_GUM=true
 fi
+
+# Standard message functions
+msg_info() {
+    if [ "$HAS_GUM" = true ]; then
+        gum style --foreground 63 "[INFO] $1"
+    else
+        echo "[INFO] $1"
+    fi
+}
+
+msg_success() {
+    if [ "$HAS_GUM" = true ]; then
+        gum style --foreground 42 "[SUCCESS] $1"
+    else
+        echo "[SUCCESS] $1"
+    fi
+}
+
+msg_error() {
+    if [ "$HAS_GUM" = true ]; then
+        gum style --foreground 196 "[ERROR] $1" >&2
+    else
+        echo "[ERROR] $1" >&2
+    fi
+}
+
+msg_warning() {
+    if [ "$HAS_GUM" = true ]; then
+        gum style --foreground 214 "[WARNING] $1"
+    else
+        echo "[WARNING] $1"
+    fi
+}
+
+# Help function
+print_usage() {
+    cat <<EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Description:
+    Add repositories to pacman.conf with validation, key management, and
+    optional package installation. Supports both Include and Server repository
+    types.
+
+Options:
+    --help, -h          Show this help message
+    --dry-run           Show what would be done without making changes
+
+Examples:
+    $(basename "$0")
+    $(basename "$0") --dry-run
+
+EOF
+}
+
+# Parse arguments
+DRY_RUN=0
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --help|-h)
+            print_usage
+            exit 0
+            ;;
+        --dry-run)
+            DRY_RUN=1
+            msg_info "Running in DRY RUN mode: No changes will be made."
+            ;;
+        *)
+            msg_error "Unknown option: $1"
+            print_usage
+            exit 1
+            ;;
+    esac
+    shift
+done
 
 # Use an argv array so we can conditionally prepend sudo without empty-command issues.
 SUDO=()
@@ -21,7 +100,11 @@ BACKUP_SUFFIX="$(date +%Y%m%d-%H%M%S)"
 # Safe runner: no eval; preserves argv and quoting.
 run() {
   if [[ $DRY_RUN -eq 1 ]]; then
-    printf '[dry-run] '
+    if [ "$HAS_GUM" = true ]; then
+        gum style --foreground 214 "[dry-run] " --no-newline
+    else
+        printf '[dry-run] '
+    fi
     printf '%q ' "$@"
     printf '\n'
   else

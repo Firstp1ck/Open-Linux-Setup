@@ -236,7 +236,7 @@ validate_package_name() {
 validate_package_version() {
     local version=$1
     # Strip any non-numeric characters except dots
-    PKG_VER=$(echo "$version" | sed 's/[^0-9.]//g')
+    PKG_VER="${version//[^0-9.]/}"
     # Ensure version starts with a number
     if [[ ! "$PKG_VER" =~ ^[0-9] ]]; then
         echo "Error: Version must start with a number"
@@ -275,7 +275,7 @@ check_aur_ssh() {
                 config_set last_aur_email "$user_email"
                 echo "Generating SSH key. You will be prompted to enter a passphrase."
                 ssh-keygen -t ed25519 -C "$user_email" -f ~/.ssh/aur_ed25519
-                if [ $? -ne 0 ]; then
+                if ! ssh-keygen -t ed25519 -C "$user_email" -f ~/.ssh/aur_ed25519; then
                     echo "Error: Failed to generate SSH key."
                     exit 1
                 fi
@@ -349,8 +349,14 @@ check_aur_ssh() {
             if grep -qE '^Host[[:space:]]+aur$' "$config_file"; then
                 echo "SSH config for 'aur' already exists in $config_file"
             else
+                local needs_newline=false
+                if [ -s "$config_file" ]; then
+                    needs_newline=true
+                fi
                 {
-                    [ -s "$config_file" ] && echo ""
+                    if [ "$needs_newline" = true ]; then
+                        echo ""
+                    fi
                     echo "Host aur"
                     echo "    HostName aur.archlinux.org"
                     echo "    User aur"

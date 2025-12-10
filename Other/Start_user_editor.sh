@@ -2,6 +2,46 @@
 
 set -euo pipefail
 
+# Script: Start_user_editor.sh
+# Description: User and access management tool with TUI interface
+
+# Help function
+print_usage() {
+    cat <<EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Description:
+    Interactive user and access management tool. Create users, delete users,
+    modify usernames and passwords, and manage user groups.
+
+Options:
+    --help, -h          Show this help message
+
+Examples:
+    $(basename "$0")
+
+Note: This script must be run as root.
+
+EOF
+}
+
+# Parse arguments
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --help|-h)
+            print_usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            print_usage
+            exit 1
+            ;;
+    esac
+    # shellcheck disable=SC2317
+    shift
+done
+
 require_gum() {
     if ! command -v gum >/dev/null 2>&1; then
         echo "This script requires 'gum' (TUI)." >&2

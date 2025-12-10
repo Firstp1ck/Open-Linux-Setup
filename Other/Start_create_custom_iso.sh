@@ -1,4 +1,44 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Script: Start_create_custom_iso.sh
+# Description: Create custom Arch Linux ISO with pre-configured settings
+
+# Help function
+print_usage() {
+    cat <<EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Description:
+    Create a custom Arch Linux ISO with pre-configured settings, packages,
+    and configurations. Interactive tool for building customized installation media.
+
+Options:
+    --help, -h          Show this help message
+
+Examples:
+    $(basename "$0")
+
+EOF
+}
+
+# Parse arguments
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --help|-h)
+            print_usage
+            exit 0
+            ;;
+        *)
+            print_error "Unknown option: $1"
+            print_usage
+            exit 1
+            ;;
+    esac
+    # shellcheck disable=SC2317
+    shift
+done
 
 # Colors for better output
 RED='\033[0;31m'
@@ -136,6 +176,7 @@ validate_platform() {
         exit 1
     fi
     if [[ -f /etc/os-release ]]; then
+        # shellcheck disable=SC1091
         . /etc/os-release
         print_info "Detected distro: ${NAME:-Unknown} (${ID:-unknown})"
     else
@@ -374,7 +415,7 @@ configure_lsb_release() {
         echo "2) Arch Linux (generic Arch configuration)"
         echo "3) Skip configuration"
         while true; do
-            read -rp "$(printf "${YELLOW}${BOLD}? Choose configuration (1-3): ${NC}")" choice
+            read -rp "$(printf '%s%s%s%s' "${YELLOW}" "${BOLD}" "? Choose configuration (1-3): " "${NC}")" choice
             case $choice in
                 1) selection="EndeavourOS"; break;;
                 2) selection="Arch Linux"; break;;
