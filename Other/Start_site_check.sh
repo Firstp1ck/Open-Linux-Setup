@@ -300,11 +300,32 @@ resolve_dns() {
     if [[ "$A_RECORDS" == "$GOOGLE_DNS_RESULT" && "$A_RECORDS" == "$CLOUDFLARE_DNS_RESULT" ]]; then
       status "OK" "DNS results consistent across resolvers"
     else
-      status "WARN" "DNS results differ between resolvers"
-      detail "Local DNS: $A_RECORDS"
-      detail "Google DNS: $GOOGLE_DNS_RESULT"
-      detail "Cloudflare DNS: $CLOUDFLARE_DNS_RESULT"
-      add_block_indicator "DNS results differ between resolvers (possible DNS filtering)"
+      # Check if results are from the same subnet/range (load balancing is normal)
+      # Extract first IP from each result for comparison
+      local local_ip google_ip cloudflare_ip
+      local_ip=$(echo "$A_RECORDS" | head -1)
+      google_ip=$(echo "$GOOGLE_DNS_RESULT" | head -1)
+      cloudflare_ip=$(echo "$CLOUDFLARE_DNS_RESULT" | head -1)
+      
+      # Extract first 3 octets (subnet) for comparison
+      local local_subnet google_subnet cloudflare_subnet
+      local_subnet=$(echo "$local_ip" | cut -d. -f1-3)
+      google_subnet=$(echo "$google_ip" | cut -d. -f1-3)
+      cloudflare_subnet=$(echo "$cloudflare_ip" | cut -d. -f1-3)
+      
+      # If all are from same subnet, it's likely load balancing (normal)
+      if [[ "$local_subnet" == "$google_subnet" && "$local_subnet" == "$cloudflare_subnet" ]]; then
+        status "INFO" "DNS results differ (likely load balancing)"
+        detail "Local DNS: $A_RECORDS"
+        detail "Google DNS: $GOOGLE_DNS_RESULT"
+        detail "Cloudflare DNS: $CLOUDFLARE_DNS_RESULT"
+      else
+        status "WARN" "DNS results differ significantly between resolvers"
+        detail "Local DNS: $A_RECORDS"
+        detail "Google DNS: $GOOGLE_DNS_RESULT"
+        detail "Cloudflare DNS: $CLOUDFLARE_DNS_RESULT"
+        add_block_indicator "DNS results differ between resolvers (possible DNS filtering)"
+      fi
     fi
   fi
 }
@@ -350,35 +371,87 @@ curl_tests() {
     return
   fi
 
+  # Calculate total timeout: curl timeout + 5 seconds buffer for DNS/connection overhead
+  local total_timeout=$((TIMEOUT_CONNECT + 5))
+
   # Force IPv4
   status "INFO" "Testing HTTPS over IPv4..."
-  CURL4_OUTPUT=$(gum spin --spinner dot --title "Connecting to https://$TARGET via IPv4..." -- \
-    bash -c "curl -4 -I -m $TIMEOUT_CONNECT -sS -w '%{http_code} %{remote_ip} %{remote_port}\n' 'https://$TARGET' -o /dev/null 2>&1")
-  CURL4_RC=$?
-
+  # Temporarily disable exit on error to handle timeouts gracefully
+  set +e
+  # Use timeout command as a safety net in case curl hangs despite its own timeout
+  # Run curl and capture output, then extract the HTTP code line
+  local curl4_output_raw
+  if command -v timeout >/dev/null 2>&1; then
+    curl4_output_raw=$(timeout "$total_timeout" bash -c "curl -4 -I -m $TIMEOUT_CONNECT --connect-timeout $TIMEOUT_CONNECT -sS -w '%{http_code} %{remote_ip} %{remote_port}\n' 'https://$TARGET' -o /dev/null 2>&1" 2>&1)
+    CURL4_RC=$?
+  else
+    curl4_output_raw=$(bash -c "curl -4 -I -m $TIMEOUT_CONNECT --connect-timeout $TIMEOUT_CONNECT -sS -w '%{http_code} %{remote_ip} %{remote_port}\n' 'https://$TARGET' -o /dev/null 2>&1" 2>&1)
+    CURL4_RC=$?
+  fi
+  # Extract the HTTP code line (only if curl succeeded)
   if [[ $CURL4_RC -eq 0 ]]; then
+    # Curl succeeded - extract HTTP code line
+    CURL4_OUTPUT=$(echo "$curl4_output_raw" | grep -oE '[0-9]{3} [0-9.]+ [0-9]+' | tail -1 || echo "")
+  else
+    # Curl failed - extract error message
+    local error_msg
+    error_msg=$(echo "$curl4_output_raw" | grep -E "^curl:|Could not resolve|Connection|timeout" | head -1 || echo "$curl4_output_raw" | head -1)
+    CURL4_OUTPUT="${error_msg:-$curl4_output_raw}"
+  fi
+  set -e
+
+  # Check if curl succeeded (exit code 0 and valid HTTP response)
+  if [[ $CURL4_RC -eq 0 ]] && [[ "$CURL4_OUTPUT" =~ ^[0-9]{3} ]]; then
     status "OK" "IPv4 HTTPS succeeded"
     detail "Response: $CURL4_OUTPUT"
     CURL4_OK=1
   else
     status "FAIL" "IPv4 HTTPS failed (curl exit $CURL4_RC)"
-    detail "Error: $CURL4_OUTPUT"
+    if [[ -n "$CURL4_OUTPUT" ]]; then
+      detail "Error: $CURL4_OUTPUT"
+    else
+      detail "Connection timeout or network error"
+    fi
     CURL4_OK=0
   fi
 
   # Force IPv6
   status "INFO" "Testing HTTPS over IPv6..."
-  CURL6_OUTPUT=$(gum spin --spinner dot --title "Connecting to https://$TARGET via IPv6..." -- \
-    bash -c "curl -6 -I -m $TIMEOUT_CONNECT -sS -w '%{http_code} %{remote_ip} %{remote_port}\n' 'https://$TARGET' -o /dev/null 2>&1")
-  CURL6_RC=$?
-
+  # Temporarily disable exit on error to handle timeouts gracefully
+  set +e
+  # Use timeout command as a safety net in case curl hangs despite its own timeout
+  local curl6_output_raw
+  if command -v timeout >/dev/null 2>&1; then
+    curl6_output_raw=$(timeout "$total_timeout" bash -c "curl -6 -I -m $TIMEOUT_CONNECT --connect-timeout $TIMEOUT_CONNECT -sS -w '%{http_code} %{remote_ip} %{remote_port}\n' 'https://$TARGET' -o /dev/null 2>&1" 2>&1)
+    CURL6_RC=$?
+  else
+    curl6_output_raw=$(bash -c "curl -6 -I -m $TIMEOUT_CONNECT --connect-timeout $TIMEOUT_CONNECT -sS -w '%{http_code} %{remote_ip} %{remote_port}\n' 'https://$TARGET' -o /dev/null 2>&1" 2>&1)
+    CURL6_RC=$?
+  fi
+  # Extract the HTTP code line (only if curl succeeded)
   if [[ $CURL6_RC -eq 0 ]]; then
+    # Curl succeeded - extract HTTP code line
+    CURL6_OUTPUT=$(echo "$curl6_output_raw" | grep -oE '[0-9]{3} [0-9.]+ [0-9]+' | tail -1 || echo "")
+  else
+    # Curl failed - extract error message
+    local error_msg
+    error_msg=$(echo "$curl6_output_raw" | grep -E "^curl:|Could not resolve|Connection|timeout" | head -1 || echo "$curl6_output_raw" | head -1)
+    CURL6_OUTPUT="${error_msg:-$curl6_output_raw}"
+  fi
+  set -e
+
+  # Check if curl succeeded (exit code 0 and valid HTTP response)
+  if [[ $CURL6_RC -eq 0 ]] && [[ "$CURL6_OUTPUT" =~ ^[0-9]{3} ]]; then
     status "OK" "IPv6 HTTPS succeeded"
     detail "Response: $CURL6_OUTPUT"
     CURL6_OK=1
   else
     status "FAIL" "IPv6 HTTPS failed (curl exit $CURL6_RC)"
-    detail "Error: $CURL6_OUTPUT"
+    if [[ -n "$CURL6_OUTPUT" ]]; then
+      detail "Error: $CURL6_OUTPUT"
+    else
+      detail "Connection timeout or network error"
+    fi
     CURL6_OK=0
   fi
 }
@@ -405,22 +478,43 @@ user_agent_tests() {
 
   local results=()
   local blocked_uas=()
+  local total_timeout=$((TIMEOUT_CONNECT + 5))
+
+  # Temporarily disable exit on error to handle timeouts gracefully
+  set +e
 
   for ua_name in "${!USER_AGENTS[@]}"; do
     local ua="${USER_AGENTS[$ua_name]}"
+    local result_raw
+    local curl_rc
+
+    # Use timeout command as a safety net in case curl hangs despite its own timeout
+    if command -v timeout >/dev/null 2>&1; then
+      result_raw=$(timeout "$total_timeout" bash -c "curl -sS -o /dev/null -w '%{http_code}' -m $TIMEOUT_CONNECT --connect-timeout $TIMEOUT_CONNECT -A '$ua' 'https://$TARGET' 2>&1" 2>&1)
+      curl_rc=$?
+    else
+      result_raw=$(bash -c "curl -sS -o /dev/null -w '%{http_code}' -m $TIMEOUT_CONNECT --connect-timeout $TIMEOUT_CONNECT -A '$ua' 'https://$TARGET' 2>&1" 2>&1)
+      curl_rc=$?
+    fi
+
+    # Extract HTTP code from output
     local result
+    if [[ "$result_raw" =~ ^[0-9]{3}$ ]]; then
+      result="$result_raw"
+    elif [[ "$result_raw" =~ ([0-9]{3}) ]]; then
+      result="${BASH_REMATCH[1]}"
+    else
+      result="000"
+    fi
 
-    result=$(gum spin --spinner dot --title "Testing with $ua_name User-Agent..." -- \
-      bash -c "curl -s -o /dev/null -w '%{http_code}' -m $TIMEOUT_CONNECT -A '$ua' 'https://$TARGET' 2>/dev/null")
-
-    if [[ "$result" == "200" || "$result" == "301" || "$result" == "302" ]]; then
+    if [[ $curl_rc -eq 0 && ("$result" == "200" || "$result" == "301" || "$result" == "302") ]]; then
       status "OK" "$ua_name: HTTP $result"
       results+=("$ua_name:OK")
     elif [[ "$result" == "403" || "$result" == "406" || "$result" == "429" ]]; then
       status "BLOCK" "$ua_name: HTTP $result (potentially blocked)"
       blocked_uas+=("$ua_name")
       results+=("$ua_name:BLOCKED")
-    elif [[ "$result" == "000" ]]; then
+    elif [[ "$result" == "000" || $curl_rc -ne 0 ]]; then
       status "FAIL" "$ua_name: Connection failed"
       results+=("$ua_name:FAIL")
     else
@@ -428,6 +522,9 @@ user_agent_tests() {
       results+=("$ua_name:$result")
     fi
   done
+
+  # Re-enable exit on error
+  set -e
 
   # Analyze results
   if [[ ${#blocked_uas[@]} -gt 0 ]]; then
@@ -449,68 +546,95 @@ header_analysis() {
   fi
 
   status "INFO" "Fetching response headers..."
-  HEADERS=$(gum spin --spinner dot --title "Analyzing response headers..." -- \
-    bash -c "curl -sI -m $TIMEOUT_CONNECT 'https://$TARGET' 2>/dev/null")
+  local total_timeout=$((TIMEOUT_CONNECT + 5))
+  set +e
+  local headers_raw
+  if command -v timeout >/dev/null 2>&1; then
+    headers_raw=$(timeout "$total_timeout" bash -c "curl -sI -m $TIMEOUT_CONNECT --connect-timeout $TIMEOUT_CONNECT 'https://$TARGET' 2>&1" 2>&1)
+  else
+    headers_raw=$(bash -c "curl -sI -m $TIMEOUT_CONNECT --connect-timeout $TIMEOUT_CONNECT 'https://$TARGET' 2>&1" 2>&1)
+  fi
+  # Extract only the HTTP headers (lines starting with HTTP/ or header names)
+  HEADERS=$(echo "$headers_raw" | grep -E "^HTTP/|^[A-Za-z-]+:" || echo "")
+  set -e
 
-  if [[ -z "$HEADERS" ]]; then
+  # Check if headers were retrieved successfully
+  if [[ -z "$HEADERS" ]] || [[ "$headers_raw" =~ ^curl: ]] || [[ "$headers_raw" =~ "Connection timed out" ]] || [[ "$headers_raw" =~ "timeout" ]] || [[ "$headers_raw" =~ "Could not resolve host" ]]; then
     status "FAIL" "Could not retrieve headers"
+    if [[ -n "$headers_raw" ]]; then
+      detail "Error: $(echo "$headers_raw" | head -1)"
+    fi
     return
   fi
+
+  # Check if we got valid HTTP headers (should start with HTTP/)
+  if ! echo "$HEADERS" | head -1 | grep -q "^HTTP/"; then
+    status "FAIL" "Invalid response received (not HTTP headers)"
+    if [[ -n "$headers_raw" ]]; then
+      detail "Received: $(echo "$headers_raw" | head -3 | tr '\n' ' ')"
+    fi
+    return
+  fi
+
+  # Temporarily disable exit on error for header processing (these are analysis commands)
+  set +e
 
   # Check for blocking-related headers
   echo
   status "INFO" "Checking for security/blocking headers..."
 
   # X-Frame-Options
-  if echo "$HEADERS" | grep -qi "X-Frame-Options"; then
+  if echo "$HEADERS" | grep -qi "X-Frame-Options" 2>/dev/null; then
     local xfo
-    xfo=$(echo "$HEADERS" | grep -i "X-Frame-Options" | head -1)
-    status "INFO" "X-Frame-Options: $(echo "$xfo" | cut -d: -f2-)"
+    xfo=$(echo "$HEADERS" | grep -i "X-Frame-Options" 2>/dev/null | head -1)
+    if [[ -n "$xfo" ]]; then
+      status "INFO" "X-Frame-Options: $(echo "$xfo" | cut -d: -f2- 2>/dev/null | xargs)"
+    fi
   fi
 
   # Rate limiting headers
-  if echo "$HEADERS" | grep -qi "X-RateLimit\|RateLimit"; then
+  if echo "$HEADERS" | grep -qi "X-RateLimit\|RateLimit" 2>/dev/null; then
     status "WARN" "Rate limiting headers detected"
-    echo "$HEADERS" | grep -i "RateLimit" | while read -r line; do
-      detail "$line"
+    echo "$HEADERS" | grep -i "RateLimit" 2>/dev/null | while read -r line || true; do
+      [[ -n "$line" ]] && detail "$line"
     done
     add_block_indicator "Rate limiting headers present"
   fi
 
   # Cloudflare
-  if echo "$HEADERS" | grep -qi "cf-ray\|cloudflare"; then
+  if echo "$HEADERS" | grep -qi "cf-ray\|cloudflare" 2>/dev/null; then
     status "INFO" "Cloudflare protection detected"
     add_block_indicator "Site uses Cloudflare (may have bot protection)"
   fi
 
   # AWS WAF
-  if echo "$HEADERS" | grep -qi "x-amz-cf\|x-amzn"; then
+  if echo "$HEADERS" | grep -qi "x-amz-cf\|x-amzn" 2>/dev/null; then
     status "INFO" "AWS CloudFront/WAF detected"
     add_block_indicator "Site uses AWS CloudFront/WAF"
   fi
 
   # Akamai
-  if echo "$HEADERS" | grep -qi "akamai\|x-akamai"; then
+  if echo "$HEADERS" | grep -qi "akamai\|x-akamai" 2>/dev/null; then
     status "INFO" "Akamai CDN/WAF detected"
     add_block_indicator "Site uses Akamai"
   fi
 
   # Sucuri
-  if echo "$HEADERS" | grep -qi "x-sucuri"; then
+  if echo "$HEADERS" | grep -qi "x-sucuri" 2>/dev/null; then
     status "INFO" "Sucuri WAF detected"
     add_block_indicator "Site uses Sucuri WAF"
   fi
 
   # Check for unusual server responses
   local server_header
-  server_header=$(echo "$HEADERS" | grep -i "^Server:" | head -1)
+  server_header=$(echo "$HEADERS" | grep -i "^Server:" 2>/dev/null | head -1)
   if [[ -n "$server_header" ]]; then
-    status "INFO" "Server: $(echo "$server_header" | cut -d: -f2-)"
+    status "INFO" "Server: $(echo "$server_header" | cut -d: -f2- 2>/dev/null | xargs)"
   fi
 
   # Check HTTP status
   local http_status
-  http_status=$(echo "$HEADERS" | head -1 | awk '{print $2}')
+  http_status=$(echo "$HEADERS" | head -1 | awk '{print $2}' 2>/dev/null)
   case "$http_status" in
     403)
       status "BLOCK" "HTTP 403 Forbidden - Access denied"
@@ -535,6 +659,9 @@ header_analysis() {
       add_block_indicator "HTTP 503 (possible WAF block)"
       ;;
   esac
+
+  # Re-enable exit on error
+  set -e
 }
 
 # NEW: Response body analysis for block pages
@@ -548,18 +675,27 @@ body_analysis() {
 
   status "INFO" "Analyzing response body for block indicators..."
 
-  BODY=$(gum spin --spinner dot --title "Fetching page content..." -- \
-    bash -c "curl -s -m $TIMEOUT_CONNECT -L 'https://$TARGET' 2>/dev/null | head -c 50000")
+  local total_timeout=$((TIMEOUT_CONNECT + 5))
+  set +e
+  if command -v timeout >/dev/null 2>&1; then
+    BODY=$(timeout "$total_timeout" gum spin --spinner dot --title "Fetching page content..." -- \
+      bash -c "curl -s -m $TIMEOUT_CONNECT --connect-timeout $TIMEOUT_CONNECT -L 'https://$TARGET' 2>/dev/null | head -c 50000" 2>&1)
+  else
+    BODY=$(gum spin --spinner dot --title "Fetching page content..." -- \
+      bash -c "curl -s -m $TIMEOUT_CONNECT --connect-timeout $TIMEOUT_CONNECT -L 'https://$TARGET' 2>/dev/null | head -c 50000" 2>&1)
+  fi
+  set -e
 
-  if [[ -z "$BODY" ]]; then
+  if [[ -z "$BODY" ]] || [[ "$BODY" =~ ^curl: ]] || [[ "$BODY" =~ "Connection timed out" ]]; then
     status "WARN" "Could not retrieve page body"
     return
   fi
 
   local found_indicators=0
+  set +e
 
-  # Check for CAPTCHA indicators
-  if echo "$BODY" | grep -qiE "captcha|recaptcha|hcaptcha|turnstile|challenge|verify.+human|are.+you.+human|prove.+human|bot.+check"; then
+  # Check for CAPTCHA indicators (more specific patterns to avoid false positives)
+  if echo "$BODY" | grep -qiE "(please|complete|solve).+(captcha|recaptcha|hcaptcha|turnstile|challenge)|verify.*you.*are.*human|prove.*you.*are.*human|are.*you.*a.*robot|bot.*check.*required" 2>/dev/null; then
     status "BLOCK" "CAPTCHA/Challenge detected in response"
     add_block_indicator "CAPTCHA challenge present"
     CAPTCHA_DETECTED=1
@@ -567,30 +703,30 @@ body_analysis() {
   fi
 
   # Check for access denied messages
-  if echo "$BODY" | grep -qiE "access.+denied|forbidden|blocked|not.+allowed|permission.+denied|unauthorized"; then
+  if echo "$BODY" | grep -qiE "access.+denied|forbidden|blocked|not.+allowed|permission.+denied|unauthorized" 2>/dev/null; then
     status "BLOCK" "Access denied message detected"
     add_block_indicator "Access denied message in page"
     found_indicators=1
   fi
 
   # Check for geo-blocking messages
-  if echo "$BODY" | grep -qiE "not.+available.+in.+your.+(country|region)|geo.?restrict|location.+not.+supported|country.+blocked"; then
+  if echo "$BODY" | grep -qiE "not.+available.+in.+your.+(country|region)|geo.?restrict|location.+not.+supported|country.+blocked" 2>/dev/null; then
     status "BLOCK" "Geographic restriction message detected"
     add_block_indicator "Geographic restriction message"
     GEO_BLOCK_DETECTED=1
     found_indicators=1
   fi
 
-  # Check for rate limiting messages
-  if echo "$BODY" | grep -qiE "rate.+limit|too.+many.+requests|slow.+down|try.+again.+later"; then
+  # Check for rate limiting messages (more specific to avoid false positives)
+  if echo "$BODY" | grep -qiE "(rate.*limit.*exceeded|too.*many.*requests.*please|you.*have.*exceeded.*rate|rate.*limit.*reached|slow.*down.*you.*are.*requesting)" 2>/dev/null; then
     status "BLOCK" "Rate limiting message detected"
     add_block_indicator "Rate limiting message"
     RATE_LIMIT_DETECTED=1
     found_indicators=1
   fi
 
-  # Check for bot detection messages
-  if echo "$BODY" | grep -qiE "bot.+detected|automated.+access|suspicious.+activity|unusual.+traffic|security.+check"; then
+  # Check for bot detection messages (more specific to avoid false positives)
+  if echo "$BODY" | grep -qiE "(bot.*detected.*access.*denied|automated.*access.*prohibited|suspicious.*activity.*detected|unusual.*traffic.*from.*your.*network|security.*check.*required.*automated)" 2>/dev/null; then
     status "BLOCK" "Bot/automation detection message found"
     add_block_indicator "Bot detection triggered"
     BOT_BLOCK_DETECTED=1
@@ -598,25 +734,27 @@ body_analysis() {
   fi
 
   # Check for VPN/Proxy blocking
-  if echo "$BODY" | grep -qiE "vpn.+detected|proxy.+detected|anonymizer|tor.+exit"; then
+  if echo "$BODY" | grep -qiE "vpn.+detected|proxy.+detected|anonymizer|tor.+exit" 2>/dev/null; then
     status "BLOCK" "VPN/Proxy detection message found"
     add_block_indicator "VPN/Proxy blocking detected"
     found_indicators=1
   fi
 
-  # Check for JavaScript challenge (common in Cloudflare)
-  if echo "$BODY" | grep -qiE "checking.+your.+browser|please.+wait|just.+a.+moment|ddos.+protection|ray.+id"; then
+  # Check for JavaScript challenge (common in Cloudflare) - more specific patterns
+  if echo "$BODY" | grep -qiE "(checking.*your.*browser.*before.*accessing|please.*wait.*while.*we.*verify|just.*a.*moment.*while.*we.*check|ddos.*protection.*by.*cloudflare|ray.*id.*cloudflare)" 2>/dev/null; then
     status "WARN" "JavaScript challenge page detected (DDoS protection)"
     add_block_indicator "JavaScript challenge (DDoS protection)"
     found_indicators=1
   fi
 
   # Check for IP blocking messages
-  if echo "$BODY" | grep -qiE "ip.+blocked|ip.+banned|your.+ip|blacklist"; then
+  if echo "$BODY" | grep -qiE "ip.+blocked|ip.+banned|your.+ip|blacklist" 2>/dev/null; then
     status "BLOCK" "IP blocking message detected"
     add_block_indicator "IP-based blocking message"
     found_indicators=1
   fi
+
+  set -e
 
   if [[ $found_indicators -eq 0 ]]; then
     status "OK" "No obvious blocking indicators found in page content"
@@ -639,41 +777,44 @@ tls_analysis() {
 
   status "INFO" "Testing TLS connectivity and certificate..."
 
+  set +e
   # Test TLS connection with timeout to prevent hanging
   TLS_INFO=$(gum spin --spinner dot --title "Analyzing TLS connection..." -- \
-    bash -c "timeout 10 bash -c 'echo Q | openssl s_client -connect \"$TARGET:443\" -servername \"$TARGET\" 2>/dev/null' || echo ''")
+    bash -c "timeout 10 bash -c 'echo Q | openssl s_client -connect \"$TARGET:443\" -servername \"$TARGET\" 2>/dev/null' || echo ''" 2>&1)
 
-  if [[ -z "$TLS_INFO" ]]; then
+  if [[ -z "$TLS_INFO" ]] || [[ "$TLS_INFO" =~ "timeout" ]] || [[ "$TLS_INFO" =~ "Connection refused" ]]; then
     status "FAIL" "Could not establish TLS connection (timeout or refused)"
     add_block_indicator "TLS connection failed"
     TLS_BLOCK_DETECTED=1
+    set -e
     return
   fi
 
   # Check if connection was actually successful
-  if ! echo "$TLS_INFO" | grep -q "CONNECTED"; then
+  if ! echo "$TLS_INFO" | grep -q "CONNECTED" 2>/dev/null; then
     status "FAIL" "TLS connection failed"
     add_block_indicator "TLS connection failed"
     TLS_BLOCK_DETECTED=1
+    set -e
     return
   fi
 
   # Extract TLS version
   local tls_version
-  tls_version=$(echo "$TLS_INFO" | grep "Protocol" | awk '{print $3}')
+  tls_version=$(echo "$TLS_INFO" | grep "Protocol" 2>/dev/null | awk '{print $3}' 2>/dev/null)
   if [[ -n "$tls_version" ]]; then
     status "OK" "TLS Version: $tls_version"
   fi
 
   # Check certificate
   local cert_subject
-  cert_subject=$(echo "$TLS_INFO" | grep "subject=" | head -1)
+  cert_subject=$(echo "$TLS_INFO" | grep "subject=" 2>/dev/null | head -1)
   if [[ -n "$cert_subject" ]]; then
     status "INFO" "Certificate: ${cert_subject//subject=/}"
   fi
 
   # Check for certificate errors
-  if echo "$TLS_INFO" | grep -qi "certificate verify failed\|self.signed\|expired\|revoked"; then
+  if echo "$TLS_INFO" | grep -qi "certificate verify failed\|self.signed\|expired\|revoked" 2>/dev/null; then
     status "WARN" "TLS certificate issues detected"
     add_block_indicator "TLS certificate problems"
   fi
@@ -683,16 +824,24 @@ tls_analysis() {
   status "INFO" "Testing TLS version compatibility..."
 
   for tls_ver in "tls1_2" "tls1_3"; do
-    local result
-    result=$(gum spin --spinner dot --title "Testing $tls_ver..." -- \
-      bash -c "timeout 5 bash -c 'echo Q | openssl s_client -connect \"$TARGET:443\" -servername \"$TARGET\" -$tls_ver 2>&1' | grep -c 'CONNECTED' || echo 0")
+    local tls_test_output
+    tls_test_output=$(timeout 5 bash -c "echo Q | openssl s_client -connect \"$TARGET:443\" -servername \"$TARGET\" -$tls_ver 2>&1" 2>/dev/null || echo "")
 
-    if [[ "$result" -gt 0 ]]; then
-      status "OK" "$tls_ver: Supported"
+    if echo "$tls_test_output" | grep -q "CONNECTED" 2>/dev/null; then
+      # Extract the actual TLS version used (remove newlines and whitespace)
+      local used_version
+      used_version=$(echo "$tls_test_output" | grep "Protocol" 2>/dev/null | awk '{print $3}' 2>/dev/null | tr -d '\n\r' | xargs || echo "")
+      if [[ -n "$used_version" ]]; then
+        status "OK" "$tls_ver: Supported (negotiated: $used_version)"
+      else
+        status "OK" "$tls_ver: Supported"
+      fi
     else
       status "INFO" "$tls_ver: Not supported or blocked"
     fi
   done
+
+  set -e
 }
 
 # NEW: Rate limiting detection
@@ -710,25 +859,30 @@ rate_limit_test() {
   local blocked_count=0
   local error_count=0
 
+  set +e
   for _ in {1..10}; do
     local result
-    result=$(curl -s -o /dev/null -w '%{http_code}' -m 5 "https://$TARGET" 2>/dev/null)
+    result=$(curl -s -o /dev/null -w '%{http_code}' -m 5 --connect-timeout 5 "https://$TARGET" 2>/dev/null || echo "000")
+
+    # Clean up result to get just the HTTP code
+    result=$(echo "$result" | grep -oE '^[0-9]{3}$' || echo "000")
 
     case "$result" in
       200|301|302)
-        ((success_count++))
+        ((success_count++)) || true
         ;;
       429|503)
-        ((blocked_count++))
+        ((blocked_count++)) || true
         ;;
       *)
-        ((error_count++))
+        ((error_count++)) || true
         ;;
     esac
 
     # Small delay to avoid being too aggressive
     sleep 0.1
   done
+  set -e
 
   echo
   status "INFO" "Results: $success_count success, $blocked_count blocked, $error_count errors"
@@ -755,22 +909,48 @@ baseline_comparison() {
 
   local baseline_sites=("google.com" "cloudflare.com" "github.com")
   local baseline_ok=0
+  local total_timeout=10
 
   status "INFO" "Comparing connectivity with known-good sites..."
   echo
 
+  set +e
   for site in "${baseline_sites[@]}"; do
     local result
-    result=$(gum spin --spinner dot --title "Testing $site..." -- \
-      bash -c "curl -s -o /dev/null -w '%{http_code}' -m 5 'https://$site' 2>/dev/null")
+    local curl_rc
+    if command -v timeout >/dev/null 2>&1; then
+      result=$(timeout "$total_timeout" gum spin --spinner dot --title "Testing $site..." -- \
+        bash -c "curl -sS -o /dev/null -w '%{http_code}' -m 5 --connect-timeout 5 'https://$site' 2>&1")
+      curl_rc=$?
+    else
+      result=$(gum spin --spinner dot --title "Testing $site..." -- \
+        bash -c "curl -sS -o /dev/null -w '%{http_code}' -m 5 --connect-timeout 5 'https://$site' 2>&1")
+      curl_rc=$?
+    fi
 
-    if [[ "$result" == "200" || "$result" == "301" || "$result" == "302" ]]; then
-      status "OK" "$site: HTTP $result (reachable)"
+    # Extract HTTP code from result (handle cases where curl outputs error messages)
+    if [[ "$result" =~ ^[0-9]{3}$ ]]; then
+      # Result is a clean HTTP code
+      local http_code="$result"
+    elif [[ "$result" =~ ([0-9]{3}) ]]; then
+      # Extract HTTP code from mixed output
+      local http_code="${BASH_REMATCH[1]}"
+    else
+      # No HTTP code found, connection likely failed
+      local http_code="000"
+    fi
+
+    if [[ $curl_rc -eq 0 && ("$http_code" == "200" || "$http_code" == "301" || "$http_code" == "302") ]]; then
+      status "OK" "$site: HTTP $http_code (reachable)"
       baseline_ok=1
     else
-      status "FAIL" "$site: HTTP $result"
+      status "FAIL" "$site: HTTP $http_code"
+      if [[ -n "$result" && "$result" != "$http_code" ]]; then
+        detail "Error: $result"
+      fi
     fi
   done
+  set -e
 
   echo
   if [[ $baseline_ok -eq 1 && ${CURL4_OK:-0} -eq 0 && ${CURL6_OK:-0} -eq 0 ]]; then
@@ -795,26 +975,71 @@ port_variation_test() {
 
   status "INFO" "Testing different ports..."
 
-  # Test port 80 (HTTP)
-  local http_result
-  http_result=$(gum spin --spinner dot --title "Testing HTTP (port 80)..." -- \
-    bash -c "curl -s -o /dev/null -w '%{http_code}' -m $TIMEOUT_CONNECT 'http://$TARGET' 2>/dev/null")
+  local total_timeout=$((TIMEOUT_CONNECT + 5))
+  set +e
 
-  if [[ "$http_result" == "200" || "$http_result" == "301" || "$http_result" == "302" ]]; then
+  # Test port 80 (HTTP)
+  local http_result_raw
+  local http_rc
+  if command -v timeout >/dev/null 2>&1; then
+    http_result_raw=$(timeout "$total_timeout" bash -c "curl -sS -o /dev/null -w '%{http_code}' -m $TIMEOUT_CONNECT --connect-timeout $TIMEOUT_CONNECT 'http://$TARGET' 2>&1" 2>&1)
+    http_rc=$?
+  else
+    http_result_raw=$(bash -c "curl -sS -o /dev/null -w '%{http_code}' -m $TIMEOUT_CONNECT --connect-timeout $TIMEOUT_CONNECT 'http://$TARGET' 2>&1" 2>&1)
+    http_rc=$?
+  fi
+  # Extract HTTP code from output (only if curl succeeded, otherwise it's a timeout/error)
+  local http_result
+  if [[ $http_rc -eq 0 ]] && [[ "$http_result_raw" =~ ^[0-9]{3}$ ]]; then
+    # Curl succeeded and returned a clean HTTP code
+    http_result="$http_result_raw"
+  elif [[ $http_rc -eq 0 ]] && [[ "$http_result_raw" =~ ^([0-9]{3}) ]]; then
+    # Curl succeeded but output might have extra text
+    http_result="${BASH_REMATCH[1]}"
+  else
+    # Curl failed (timeout, connection error, etc.) - not a valid HTTP code
+    http_result="000"
+  fi
+
+  if [[ $http_rc -eq 0 && ("$http_result" == "200" || "$http_result" == "301" || "$http_result" == "302") ]]; then
     status "OK" "HTTP (port 80): HTTP $http_result"
   else
     status "WARN" "HTTP (port 80): HTTP $http_result"
+    if [[ $http_rc -ne 0 && -n "$http_result_raw" && "$http_result_raw" != "$http_result" ]]; then
+      detail "Error: $(echo "$http_result_raw" | head -1)"
+    fi
   fi
 
   # Test port 443 (HTTPS)
+  local https_result_raw
+  local https_rc
+  if command -v timeout >/dev/null 2>&1; then
+    https_result_raw=$(timeout "$total_timeout" bash -c "curl -sS -o /dev/null -w '%{http_code}' -m $TIMEOUT_CONNECT --connect-timeout $TIMEOUT_CONNECT 'https://$TARGET' 2>&1" 2>&1)
+    https_rc=$?
+  else
+    https_result_raw=$(bash -c "curl -sS -o /dev/null -w '%{http_code}' -m $TIMEOUT_CONNECT --connect-timeout $TIMEOUT_CONNECT 'https://$TARGET' 2>&1" 2>&1)
+    https_rc=$?
+  fi
+  # Extract HTTP code from output (only if curl succeeded, otherwise it's a timeout/error)
   local https_result
-  https_result=$(gum spin --spinner dot --title "Testing HTTPS (port 443)..." -- \
-    bash -c "curl -s -o /dev/null -w '%{http_code}' -m $TIMEOUT_CONNECT 'https://$TARGET' 2>/dev/null")
+  if [[ $https_rc -eq 0 ]] && [[ "$https_result_raw" =~ ^[0-9]{3}$ ]]; then
+    # Curl succeeded and returned a clean HTTP code
+    https_result="$https_result_raw"
+  elif [[ $https_rc -eq 0 ]] && [[ "$https_result_raw" =~ ^([0-9]{3}) ]]; then
+    # Curl succeeded but output might have extra text
+    https_result="${BASH_REMATCH[1]}"
+  else
+    # Curl failed (timeout, connection error, etc.) - not a valid HTTP code
+    https_result="000"
+  fi
 
-  if [[ "$https_result" == "200" || "$https_result" == "301" || "$https_result" == "302" ]]; then
+  if [[ $https_rc -eq 0 && ("$https_result" == "200" || "$https_result" == "301" || "$https_result" == "302") ]]; then
     status "OK" "HTTPS (port 443): HTTP $https_result"
   else
     status "WARN" "HTTPS (port 443): HTTP $https_result"
+    if [[ $https_rc -ne 0 && -n "$https_result_raw" && "$https_result_raw" != "$https_result" ]]; then
+      detail "Error: $(echo "$https_result_raw" | head -1)"
+    fi
   fi
 
   # Compare HTTP vs HTTPS
@@ -828,9 +1053,24 @@ port_variation_test() {
 
   # Test alternative HTTPS port 8443 if standard ports fail
   if [[ ! "$https_result" =~ ^(200|301|302)$ ]]; then
+    local alt_result_raw
+    local alt_rc
+    if command -v timeout >/dev/null 2>&1; then
+      alt_result_raw=$(timeout "$total_timeout" bash -c "curl -sS -o /dev/null -w '%{http_code}' -m $TIMEOUT_CONNECT --connect-timeout $TIMEOUT_CONNECT 'https://$TARGET:8443' 2>&1" 2>&1)
+      alt_rc=$?
+    else
+      alt_result_raw=$(bash -c "curl -sS -o /dev/null -w '%{http_code}' -m $TIMEOUT_CONNECT --connect-timeout $TIMEOUT_CONNECT 'https://$TARGET:8443' 2>&1" 2>&1)
+      alt_rc=$?
+    fi
+    # Extract HTTP code from output
     local alt_result
-    alt_result=$(gum spin --spinner dot --title "Testing alternate HTTPS (port 8443)..." -- \
-      bash -c "curl -s -o /dev/null -w '%{http_code}' -m $TIMEOUT_CONNECT 'https://$TARGET:8443' 2>/dev/null")
+    if [[ "$alt_result_raw" =~ ^[0-9]{3}$ ]]; then
+      alt_result="$alt_result_raw"
+    elif [[ "$alt_result_raw" =~ ([0-9]{3}) ]]; then
+      alt_result="${BASH_REMATCH[1]}"
+    else
+      alt_result="000"
+    fi
 
     if [[ "$alt_result" =~ ^(200|301|302)$ ]]; then
       status "OK" "Alternate HTTPS (port 8443): HTTP $alt_result"
@@ -838,6 +1078,8 @@ port_variation_test() {
       add_block_indicator "Port 443 blocked but 8443 works"
     fi
   fi
+
+  set -e
 }
 
 # NEW: Redirect chain analysis
@@ -851,44 +1093,69 @@ redirect_analysis() {
 
   status "INFO" "Analyzing redirect chain..."
 
-  REDIRECTS=$(gum spin --spinner dot --title "Following redirects..." -- \
-    bash -c "curl -sLI -m $TIMEOUT_CONNECT 'https://$TARGET' 2>/dev/null | grep -i '^location:' | head -10")
+  local total_timeout=$((TIMEOUT_CONNECT + 5))
+  set +e
+  if command -v timeout >/dev/null 2>&1; then
+    REDIRECTS=$(timeout "$total_timeout" gum spin --spinner dot --title "Following redirects..." -- \
+      bash -c "curl -sLI -m $TIMEOUT_CONNECT --connect-timeout $TIMEOUT_CONNECT 'https://$TARGET' 2>/dev/null | grep -i '^location:' | head -10" 2>&1)
+  else
+    REDIRECTS=$(gum spin --spinner dot --title "Following redirects..." -- \
+      bash -c "curl -sLI -m $TIMEOUT_CONNECT --connect-timeout $TIMEOUT_CONNECT 'https://$TARGET' 2>/dev/null | grep -i '^location:' | head -10" 2>&1)
+  fi
 
-  if [[ -z "$REDIRECTS" ]]; then
+  # Clean up REDIRECTS - remove error messages and empty lines, keep only location headers
+  REDIRECTS=$(echo "$REDIRECTS" | grep -i "^location:" 2>/dev/null || echo "")
+
+  if [[ -z "$REDIRECTS" ]] || [[ "$REDIRECTS" =~ ^curl: ]] || [[ "$REDIRECTS" =~ "Connection timed out" ]]; then
     status "OK" "No redirects detected"
+    set -e
     return
   fi
 
   status "INFO" "Redirect chain:"
-  echo "$REDIRECTS" | while read -r redirect; do
+  # Process redirects line by line using here-string to avoid pipe hanging
+  while IFS= read -r redirect; do
+    [[ -z "$redirect" ]] && continue
+    # Skip if it's not a location header
+    [[ ! "$redirect" =~ ^[Ll]ocation: ]] && continue
+    
     local url
     # Remove "Location: " or "location: " prefix (case-insensitive, with optional spaces)
     url="${redirect#*: }"
     url="${url#"${url%%[![:space:]]*}"}"
+    [[ -z "$url" ]] && continue
+    
     detail "→ $url"
 
     # Check for suspicious redirect patterns
-    if echo "$url" | grep -qiE "block|captcha|challenge|verify|banned|denied|error"; then
+    if echo "$url" | grep -qiE "block|captcha|challenge|verify|banned|denied|error" 2>/dev/null; then
       status "BLOCK" "Redirect to potential block page detected"
       add_block_indicator "Redirect to block/challenge page: $url"
     fi
-  done
+  done <<< "$REDIRECTS"
 
   # Check final destination
-  FINAL_URL=$(gum spin --spinner dot --title "Checking final destination..." -- \
-    bash -c "curl -sL -o /dev/null -w '%{url_effective}' -m $TIMEOUT_CONNECT 'https://$TARGET' 2>/dev/null")
+  if command -v timeout >/dev/null 2>&1; then
+    FINAL_URL=$(timeout "$total_timeout" gum spin --spinner dot --title "Checking final destination..." -- \
+      bash -c "curl -sL -o /dev/null -w '%{url_effective}' -m $TIMEOUT_CONNECT --connect-timeout $TIMEOUT_CONNECT 'https://$TARGET' 2>/dev/null" 2>&1)
+  else
+    FINAL_URL=$(gum spin --spinner dot --title "Checking final destination..." -- \
+      bash -c "curl -sL -o /dev/null -w '%{url_effective}' -m $TIMEOUT_CONNECT --connect-timeout $TIMEOUT_CONNECT 'https://$TARGET' 2>/dev/null" 2>&1)
+  fi
 
-  if [[ -n "$FINAL_URL" ]]; then
+  if [[ -n "$FINAL_URL" ]] && [[ ! "$FINAL_URL" =~ ^curl: ]]; then
     status "INFO" "Final URL: $FINAL_URL"
 
     # Check if redirected to a different domain
     local final_domain
-    final_domain=$(echo "$FINAL_URL" | sed -E 's|https?://([^/]+).*|\1|')
-    if [[ "$final_domain" != "$TARGET" && "$final_domain" != "www.$TARGET" ]]; then
+    final_domain=$(echo "$FINAL_URL" | sed -E 's|https?://([^/]+).*|\1|' 2>/dev/null)
+    if [[ -n "$final_domain" && "$final_domain" != "$TARGET" && "$final_domain" != "www.$TARGET" ]]; then
       status "WARN" "Redirected to different domain: $final_domain"
       add_block_indicator "Redirected to different domain: $final_domain"
     fi
   fi
+
+  set -e
 }
 
 # NEW: Connection timing analysis
@@ -902,21 +1169,30 @@ timing_analysis() {
 
   status "INFO" "Measuring connection timing..."
 
-  local timing_output
-  timing_output=$(gum spin --spinner dot --title "Analyzing connection timing..." -- \
-    bash -c "curl -s -o /dev/null -w 'dns:%{time_namelookup}s connect:%{time_connect}s ttfb:%{time_starttransfer}s total:%{time_total}s' -m $TIMEOUT_CONNECT 'https://$TARGET' 2>/dev/null")
+  local total_timeout=$((TIMEOUT_CONNECT + 5))
+  set +e
+  if command -v timeout >/dev/null 2>&1; then
+    local timing_output
+    timing_output=$(timeout "$total_timeout" gum spin --spinner dot --title "Analyzing connection timing..." -- \
+      bash -c "curl -s -o /dev/null -w 'dns:%{time_namelookup}s connect:%{time_connect}s ttfb:%{time_starttransfer}s total:%{time_total}s' -m $TIMEOUT_CONNECT --connect-timeout $TIMEOUT_CONNECT 'https://$TARGET' 2>/dev/null" 2>&1)
+  else
+    local timing_output
+    timing_output=$(gum spin --spinner dot --title "Analyzing connection timing..." -- \
+      bash -c "curl -s -o /dev/null -w 'dns:%{time_namelookup}s connect:%{time_connect}s ttfb:%{time_starttransfer}s total:%{time_total}s' -m $TIMEOUT_CONNECT --connect-timeout $TIMEOUT_CONNECT 'https://$TARGET' 2>/dev/null" 2>&1)
+  fi
 
-  if [[ -z "$timing_output" ]]; then
+  if [[ -z "$timing_output" ]] || [[ "$timing_output" =~ ^curl: ]]; then
     status "FAIL" "Could not measure timing"
+    set -e
     return
   fi
 
   # Parse timing values
   local dns_time connect_time ttfb total_time
-  dns_time=$(echo "$timing_output" | grep -oP 'dns:\K[0-9.]+')
-  connect_time=$(echo "$timing_output" | grep -oP 'connect:\K[0-9.]+')
-  ttfb=$(echo "$timing_output" | grep -oP 'ttfb:\K[0-9.]+')
-  total_time=$(echo "$timing_output" | grep -oP 'total:\K[0-9.]+')
+  dns_time=$(echo "$timing_output" | grep -oP 'dns:\K[0-9.]+' 2>/dev/null || echo "0")
+  connect_time=$(echo "$timing_output" | grep -oP 'connect:\K[0-9.]+' 2>/dev/null || echo "0")
+  ttfb=$(echo "$timing_output" | grep -oP 'ttfb:\K[0-9.]+' 2>/dev/null || echo "0")
+  total_time=$(echo "$timing_output" | grep -oP 'total:\K[0-9.]+' 2>/dev/null || echo "0")
 
   status "INFO" "DNS lookup: ${dns_time}s"
   status "INFO" "TCP connect: ${connect_time}s"
@@ -924,34 +1200,47 @@ timing_analysis() {
   status "INFO" "Total time: ${total_time}s"
 
   # Check for anomalies
-  if (( $(echo "$ttfb > 5" | bc -l 2>/dev/null || echo 0) )); then
-    status "WARN" "High time to first byte (>5s) - possible throttling"
-    add_block_indicator "High TTFB ($ttfb s) - possible throttling"
+  if command -v bc >/dev/null 2>&1 && [[ -n "$ttfb" ]]; then
+    if (( $(echo "$ttfb > 5" | bc -l 2>/dev/null || echo 0) )); then
+      status "WARN" "High time to first byte (>5s) - possible throttling"
+      add_block_indicator "High TTFB ($ttfb s) - possible throttling"
+    fi
   fi
 
-  if (( $(echo "$dns_time > 2" | bc -l 2>/dev/null || echo 0) )); then
-    status "WARN" "Slow DNS resolution (>2s)"
+  if command -v bc >/dev/null 2>&1 && [[ -n "$dns_time" ]]; then
+    if (( $(echo "$dns_time > 2" | bc -l 2>/dev/null || echo 0) )); then
+      status "WARN" "Slow DNS resolution (>2s)"
+    fi
   fi
 
   # Compare with baseline
   local baseline_total
-  baseline_total=$(gum spin --spinner dot --title "Comparing with baseline (google.com)..." -- \
-    bash -c "curl -s -o /dev/null -w '%{time_total}' -m 10 'https://google.com' 2>/dev/null")
+  if command -v timeout >/dev/null 2>&1; then
+    baseline_total=$(timeout 15 gum spin --spinner dot --title "Comparing with baseline (google.com)..." -- \
+      bash -c "curl -s -o /dev/null -w '%{time_total}' -m 10 --connect-timeout 10 'https://google.com' 2>/dev/null" 2>&1)
+  else
+    baseline_total=$(gum spin --spinner dot --title "Comparing with baseline (google.com)..." -- \
+      bash -c "curl -s -o /dev/null -w '%{time_total}' -m 10 --connect-timeout 10 'https://google.com' 2>/dev/null" 2>&1)
+  fi
+  baseline_total=$(echo "$baseline_total" | grep -oE '^[0-9.]+$' || echo "")
 
-  if [[ -n "$baseline_total" && -n "$total_time" ]]; then
+  if [[ -n "$baseline_total" && -n "$total_time" ]] && command -v bc >/dev/null 2>&1; then
     local ratio
     ratio=$(echo "scale=2; $total_time / $baseline_total" | bc 2>/dev/null || echo "0")
-    if (( $(echo "$ratio > 5" | bc -l 2>/dev/null || echo 0) )); then
+    if [[ -n "$ratio" ]] && (( $(echo "$ratio > 5" | bc -l 2>/dev/null || echo 0) )); then
       status "WARN" "Target is ${ratio}x slower than baseline"
       add_block_indicator "Response ${ratio}x slower than baseline (possible throttling)"
     fi
   fi
+
+  set -e
 }
 
 route_tests() {
   banner "🛤️  ROUTING (TRACEROUTE)"
 
   local tracer=""
+  local trace_timeout=90
 
   if command -v traceroute >/dev/null 2>&1; then
     tracer="traceroute"
@@ -962,26 +1251,54 @@ route_tests() {
     return
   fi
 
-  status "INFO" "Tracing IPv4 route to $TARGET..."
-  gum spin --spinner globe --title "Tracing IPv4 route (this may take a while)..." -- \
-    bash -c "$tracer -4 '$TARGET' 2>&1 > /tmp/trace4_$$.txt"
+  # Check if timeout command is available
+  if ! command -v timeout >/dev/null 2>&1; then
+    status "WARN" "timeout command not available; traceroute may hang indefinitely"
+    status "SKIP" "Skipping route tests (install 'timeout' command for safety)"
+    return
+  fi
 
-  if [[ -f "/tmp/trace4_$$.txt" ]]; then
-    gum style --foreground "250" --border normal --border-foreground "240" --padding "1" \
-      "$(cat /tmp/trace4_$$.txt)"
+  status "INFO" "Tracing IPv4 route to $TARGET..."
+  set +e
+  if timeout "$trace_timeout" gum spin --spinner globe --title "Tracing IPv4 route (this may take a while)..." -- \
+    bash -c "$tracer -4 '$TARGET' 2>&1 > /tmp/trace4_$$.txt"; then
+    if [[ -f "/tmp/trace4_$$.txt" && -s "/tmp/trace4_$$.txt" ]]; then
+      gum style --foreground "250" --border normal --border-foreground "240" --padding "1" \
+        "$(cat /tmp/trace4_$$.txt)"
+    else
+      status "WARN" "IPv4 traceroute produced no output"
+    fi
+    rm -f "/tmp/trace4_$$.txt"
+  else
+    status "WARN" "IPv4 traceroute timed out or failed after ${trace_timeout}s"
     rm -f "/tmp/trace4_$$.txt"
   fi
+  set -e
 
   echo
-  status "INFO" "Tracing IPv6 route to $TARGET..."
-  gum spin --spinner globe --title "Tracing IPv6 route (this may take a while)..." -- \
-    bash -c "$tracer -6 '$TARGET' 2>&1 > /tmp/trace6_$$.txt"
+  # Check if IPv6 is available before attempting IPv6 traceroute
+  if ! ping -6 -c 1 -W 2 ::1 >/dev/null 2>&1 && ! ip -6 route show default >/dev/null 2>&1; then
+    status "SKIP" "IPv6 not available; skipping IPv6 route trace"
+    return
+  fi
 
-  if [[ -f "/tmp/trace6_$$.txt" ]]; then
-    gum style --foreground "250" --border normal --border-foreground "240" --padding "1" \
-      "$(cat /tmp/trace6_$$.txt)"
+  status "INFO" "Tracing IPv6 route to $TARGET..."
+  set +e
+  if timeout "$trace_timeout" gum spin --spinner globe --title "Tracing IPv6 route (this may take a while)..." -- \
+    bash -c "$tracer -6 '$TARGET' 2>&1 > /tmp/trace6_$$.txt"; then
+    if [[ -f "/tmp/trace6_$$.txt" && -s "/tmp/trace6_$$.txt" ]]; then
+      gum style --foreground "250" --border normal --border-foreground "240" --padding "1" \
+        "$(cat /tmp/trace6_$$.txt)"
+    else
+      status "WARN" "IPv6 traceroute produced no output"
+    fi
+    rm -f "/tmp/trace6_$$.txt"
+  else
+    status "WARN" "IPv6 traceroute timed out or failed after ${trace_timeout}s"
+    detail "→ IPv6 may not be properly configured or target may not be reachable via IPv6"
     rm -f "/tmp/trace6_$$.txt"
   fi
+  set -e
 }
 
 # MTR (My Traceroute) analysis - combines ping and traceroute with statistics
@@ -1040,8 +1357,8 @@ mtr_analysis() {
         problem_hops+=("$hop_num")
       fi
 
-      # Check for high latency > 100ms
-      if (( $(echo "$avg_latency > 100" | bc -l 2>/dev/null || echo 0) )); then
+      # Check for high latency > 200ms (100ms is too strict for international connections)
+      if (( $(echo "$avg_latency > 200" | bc -l 2>/dev/null || echo 0) )); then
         high_latency_hops+=("Hop $hop_num ($hop_host): ${avg_latency}ms average latency")
       fi
 
@@ -1064,7 +1381,7 @@ mtr_analysis() {
 
   if [[ ${#high_latency_hops[@]} -gt 0 ]]; then
     echo
-    status "WARN" "High latency (>100ms) detected at ${#high_latency_hops[@]} hop(s):"
+    status "WARN" "High latency (>200ms) detected at ${#high_latency_hops[@]} hop(s):"
     for hop in "${high_latency_hops[@]}"; do
       detail "→ $hop"
     done
@@ -1102,11 +1419,58 @@ tcpdump_analysis() {
     return
   fi
 
-  # Check if we have permission to capture
-  if ! timeout 2 tcpdump -D >/dev/null 2>&1; then
-    status "WARN" "tcpdump requires root privileges for full analysis"
-    detail "Run script with sudo for packet capture"
+  # Check if we're running as root or have capture permissions
+  local use_sudo=""
+  local can_capture=0
 
+  # Test if we can capture without sudo
+  if [[ $EUID -eq 0 ]]; then
+    # Already root
+    can_capture=1
+  elif timeout 2 tcpdump -D >/dev/null 2>&1 && timeout 2 tcpdump -c 1 -i any >/dev/null 2>&1; then
+    # User has capture permissions (e.g., in wireshark group)
+    can_capture=1
+  else
+    # Need elevated privileges - ask user
+    echo
+    status "INFO" "tcpdump requires elevated privileges for packet capture"
+    detail "Packet capture provides deep analysis of connection issues"
+    echo
+    
+    # Use gum confirm with proper styling
+    if gum confirm \
+      --default=false \
+      --prompt.foreground="$COLOR_INFO" \
+      --selected.background="$COLOR_OK" \
+      "Run tcpdump with sudo for full packet capture analysis?"; then
+      # Verify sudo is available and works
+      if command -v sudo >/dev/null 2>&1; then
+        echo
+        status "INFO" "Requesting sudo access for tcpdump..."
+        if sudo -v; then
+          use_sudo="sudo"
+          can_capture=1
+          status "OK" "sudo access granted"
+        else
+          status "WARN" "sudo authentication failed or cancelled"
+          can_capture=0
+        fi
+      else
+        status "WARN" "sudo command not available on this system"
+        can_capture=0
+      fi
+    else
+      echo
+      status "INFO" "Skipping packet capture (user declined)"
+      # Try alternative analysis without capture
+      status "INFO" "Running limited analysis without packet capture..."
+      tcpdump_limited_analysis
+      return
+    fi
+  fi
+
+  if [[ $can_capture -eq 0 ]]; then
+    status "WARN" "Cannot capture packets without elevated privileges"
     # Try alternative analysis without capture
     status "INFO" "Running limited analysis without packet capture..."
     tcpdump_limited_analysis
@@ -1126,36 +1490,93 @@ tcpdump_analysis() {
   detail "Capturing TCP handshake and initial connection..."
 
   local capture_file="/tmp/tcpdump_$$_capture.pcap"
-  local capture_output="/tmp/tcpdump_$$_output.txt"
+  local capture_error="/tmp/tcpdump_$$_error.txt"
 
-  # Start packet capture in background, capture for connection analysis
-  gum spin --spinner dot --title "Capturing packets (5 seconds)..." -- \
-    bash -c "timeout 5 tcpdump -i any -c 50 -w '$capture_file' 'host $target_ip and port 443' 2>/dev/null &
-             sleep 1
-             curl -s -o /dev/null -m 3 'https://$TARGET' 2>/dev/null
-             sleep 3
-             wait" 2>/dev/null
+  set +e
+  
+  # Start tcpdump in background
+  $use_sudo tcpdump -i any -c 50 -w "$capture_file" "host $target_ip and port 443" >"$capture_error" 2>&1 &
+  local tcpdump_pid=$!
+  
+  # Wait a moment for tcpdump to start
+  sleep 1
+  
+  # Check if tcpdump is actually running
+  if ! kill -0 $tcpdump_pid 2>/dev/null; then
+    status "WARN" "tcpdump failed to start"
+    if [[ -f "$capture_error" && -s "$capture_error" ]]; then
+      detail "Error: $(cat "$capture_error" | head -1)"
+    fi
+    $use_sudo rm -f "$capture_file" "$capture_error" 2>/dev/null || true
+    set -e
+    return
+  fi
+  
+  # Make a request to generate traffic
+  curl -s -o /dev/null -m 3 --connect-timeout 3 "https://$TARGET" 2>/dev/null || true
+  
+  # Wait for capture to complete (max 5 seconds total)
+  sleep 3
+  
+  # Stop tcpdump if still running
+  $use_sudo kill $tcpdump_pid 2>/dev/null || true
+  wait $tcpdump_pid 2>/dev/null || true
+  
+  # Clean up error file
+  rm -f "$capture_error" 2>/dev/null || true
 
   if [[ ! -f "$capture_file" || ! -s "$capture_file" ]]; then
     status "WARN" "No packets captured - connection may be blocked before reaching interface"
     add_block_indicator "tcpdump captured no packets (possible local firewall block)"
+    set -e
     return
   fi
 
   # Analyze the capture
   status "INFO" "Analyzing captured packets..."
 
-  # Read capture and analyze
+  # Read capture and analyze (use sudo if needed to read the file)
   local packet_analysis
-  packet_analysis=$(tcpdump -r "$capture_file" -nn 2>/dev/null)
+  packet_analysis=$($use_sudo tcpdump -r "$capture_file" -nn 2>/dev/null || echo "")
 
-  # Count packet types
-  local syn_count ack_count rst_count fin_count total_packets
-  syn_count=$(echo "$packet_analysis" | grep -c "Flags \[S\]" || echo 0)
-  ack_count=$(echo "$packet_analysis" | grep -c "Flags \[.\]" || echo 0)
-  rst_count=$(echo "$packet_analysis" | grep -c "Flags \[R" || echo 0)
-  fin_count=$(echo "$packet_analysis" | grep -c "Flags \[F" || echo 0)
-  total_packets=$(echo "$packet_analysis" | wc -l)
+  if [[ -z "$packet_analysis" ]]; then
+    status "WARN" "Could not read packet capture file"
+    set -e
+    return
+  fi
+
+  # Count packet types (grep -c always outputs a number, use || true to ignore exit code 1 when count is 0)
+  # Note: Pattern matching order matters - check SYN-ACK before pure SYN, ACK before other flags
+  local syn_count synack_count ack_only_count rst_count fin_count total_packets
+  
+  # Count SYN-ACK first (contains both S and .)
+  synack_count=$(echo "$packet_analysis" | grep -c "Flags \[S\.\]" 2>/dev/null || true)
+  # Count pure SYN (S without .)
+  syn_count=$(echo "$packet_analysis" | grep -c "Flags \[S\]" 2>/dev/null || true)
+  # Count ACK-only (just . without S, R, or F) - must not match SYN-ACK
+  ack_only_count=$(echo "$packet_analysis" | grep -E "Flags \[\.\]" 2>/dev/null | grep -v "Flags \[S\.\]" | grep -v "Flags \[R" | grep -v "Flags \[F" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
+  rst_count=$(echo "$packet_analysis" | grep -c "Flags \[R" 2>/dev/null || true)
+  fin_count=$(echo "$packet_analysis" | grep -c "Flags \[F" 2>/dev/null || true)
+  total_packets=$(echo "$packet_analysis" | wc -l 2>/dev/null | tr -d ' \n' || echo "0")
+  
+  # Ensure we have valid numbers (default to 0 if empty, remove any newlines/whitespace)
+  syn_count=$(echo "$syn_count" | tr -d ' \n' || echo "0")
+  synack_count=$(echo "$synack_count" | tr -d ' \n' || echo "0")
+  ack_only_count=$(echo "$ack_only_count" | tr -d ' \n' || echo "0")
+  rst_count=$(echo "$rst_count" | tr -d ' \n' || echo "0")
+  fin_count=$(echo "$fin_count" | tr -d ' \n' || echo "0")
+  total_packets=$(echo "$total_packets" | tr -d ' \n' || echo "0")
+  
+  # Set defaults if empty
+  [[ -z "$syn_count" ]] && syn_count=0
+  [[ -z "$synack_count" ]] && synack_count=0
+  [[ -z "$ack_only_count" ]] && ack_only_count=0
+  [[ -z "$rst_count" ]] && rst_count=0
+  [[ -z "$fin_count" ]] && fin_count=0
+  [[ -z "$total_packets" ]] && total_packets=0
+  
+  # ACK count = ACK-only + SYN-ACK (since SYN-ACK contains ACK)
+  local ack_count=$((ack_only_count + synack_count))
 
   echo
   status "INFO" "Packet statistics:"
@@ -1170,8 +1591,7 @@ tcpdump_analysis() {
   status "INFO" "Connection analysis:"
 
   # Check for SYN without SYN-ACK (connection blocked)
-  local synack_count
-  synack_count=$(echo "$packet_analysis" | grep -c "Flags \[S.\]" || echo 0)
+  # synack_count already calculated above
 
   if [[ $syn_count -gt 0 && $synack_count -eq 0 ]]; then
     status "BLOCK" "SYN packets sent but no SYN-ACK received"
@@ -1188,7 +1608,8 @@ tcpdump_analysis() {
 
     # Check if RST came from target or intermediate
     local rst_from_target
-    rst_from_target=$(echo "$packet_analysis" | grep "Flags \[R" | grep -c "$target_ip" || echo 0)
+    rst_from_target=$(echo "$packet_analysis" | grep "Flags \[R" 2>/dev/null | grep -c "$target_ip" 2>/dev/null || true)
+    [[ -z "$rst_from_target" ]] && rst_from_target=0
 
     if [[ $rst_from_target -gt 0 ]]; then
       status "BLOCK" "RST packets originated from target server"
@@ -1203,7 +1624,8 @@ tcpdump_analysis() {
 
   # Check for ICMP unreachable messages
   local icmp_unreachable
-  icmp_unreachable=$(tcpdump -r "$capture_file" -nn 2>/dev/null | grep -c "ICMP.*unreachable" || echo 0)
+  icmp_unreachable=$($use_sudo tcpdump -r "$capture_file" -nn 2>/dev/null | grep -c "ICMP.*unreachable" 2>/dev/null || true)
+  [[ -z "$icmp_unreachable" ]] && icmp_unreachable=0
 
   if [[ $icmp_unreachable -gt 0 ]]; then
     status "BLOCK" "ICMP unreachable messages received"
@@ -1214,7 +1636,8 @@ tcpdump_analysis() {
   # Check TLS handshake if we got past TCP
   if [[ $synack_count -gt 0 ]]; then
     local tls_hello
-    tls_hello=$(echo "$packet_analysis" | grep -c "TLS\|SSL\|Client Hello" || echo 0)
+    tls_hello=$(echo "$packet_analysis" | grep -c "TLS\|SSL\|Client Hello" 2>/dev/null || true)
+    [[ -z "$tls_hello" ]] && tls_hello=0
 
     if [[ $tls_hello -gt 0 ]]; then
       status "OK" "TLS handshake initiated"
@@ -1226,16 +1649,20 @@ tcpdump_analysis() {
   # Show sample of captured packets
   echo
   status "INFO" "Sample of captured packets:"
-  echo "$packet_analysis" | head -10 | while read -r line; do
+  # Use here-string to avoid pipe hanging
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
     detail "$line"
-  done
+  done <<< "$(echo "$packet_analysis" | head -10 2>/dev/null || echo "")"
 
   if [[ $total_packets -gt 10 ]]; then
     detail "... ($((total_packets - 10)) more packets)"
   fi
 
-  # Cleanup
-  rm -f "$capture_file" "$capture_output"
+  # Cleanup (use sudo if needed since capture file may be owned by root)
+  $use_sudo rm -f "$capture_file" 2>/dev/null || true
+
+  set -e
 }
 
 # Limited tcpdump analysis without capture (no root)
@@ -1480,46 +1907,50 @@ summary() {
   # HTTP status-based hints (only if success)
   if [[ ${CURL4_OK:-0} -eq 1 ]]; then
     local code4
-    code4=$(awk '{print $1}' <<<"$CURL4_OUTPUT")
-    case "$code4" in
-      403|451)
-        echo
-        status "CAUSE" "IPv4 HTTP returned $code4 (access denied / legal restriction)"
-        detail "→ This can indicate IP-based blocking or geo-restriction for IPv4"
-        ;;
-      429)
-        echo
-        status "CAUSE" "IPv4 HTTP returned 429 (too many requests)"
-        detail "→ You may be rate-limited; reduce request frequency and try again later"
-        ;;
-      5??)
-        echo
-        status "HINT" "IPv4 HTTP returned a 5xx server error"
-        detail "→ The remote server is having issues, not your connection"
-        ;;
-    esac
+    code4=$(awk '{print $1}' <<<"$CURL4_OUTPUT" 2>/dev/null || echo "")
+    if [[ -n "$code4" ]]; then
+      case "$code4" in
+        403|451)
+          echo
+          status "CAUSE" "IPv4 HTTP returned $code4 (access denied / legal restriction)"
+          detail "→ This can indicate IP-based blocking or geo-restriction for IPv4"
+          ;;
+        429)
+          echo
+          status "CAUSE" "IPv4 HTTP returned 429 (too many requests)"
+          detail "→ You may be rate-limited; reduce request frequency and try again later"
+          ;;
+        5[0-9][0-9])
+          echo
+          status "HINT" "IPv4 HTTP returned a 5xx server error"
+          detail "→ The remote server is having issues, not your connection"
+          ;;
+      esac
+    fi
   fi
 
   if [[ ${CURL6_OK:-0} -eq 1 ]]; then
     local code6
-    code6=$(awk '{print $1}' <<<"$CURL6_OUTPUT")
-    case "$code6" in
-      403|451)
-        echo
-        status "CAUSE" "IPv6 HTTP returned $code6 (access denied / legal restriction)"
-        detail "→ This can indicate IP-based blocking or geo-restriction for IPv6"
-        ;;
-      429)
-        echo
-        status "CAUSE" "IPv6 HTTP returned 429 (too many requests)"
-        detail "→ You may be rate-limited; reduce request frequency and try again later"
-        ;;
-      5??)
-        echo
-        status "HINT" "IPv6 HTTP returned a 5xx server error"
-        detail "→ The remote server is having issues, not your connection"
-        ;;
-    esac
+    code6=$(awk '{print $1}' <<<"$CURL6_OUTPUT" 2>/dev/null || echo "")
+    if [[ -n "$code6" ]]; then
+      case "$code6" in
+        403|451)
+          echo
+          status "CAUSE" "IPv6 HTTP returned $code6 (access denied / legal restriction)"
+          detail "→ This can indicate IP-based blocking or geo-restriction for IPv6"
+          ;;
+        429)
+          echo
+          status "CAUSE" "IPv6 HTTP returned 429 (too many requests)"
+          detail "→ You may be rate-limited; reduce request frequency and try again later"
+          ;;
+        5[0-9][0-9])
+          echo
+          status "HINT" "IPv6 HTTP returned a 5xx server error"
+          detail "→ The remote server is having issues, not your connection"
+          ;;
+      esac
+    fi
   fi
 
 }
