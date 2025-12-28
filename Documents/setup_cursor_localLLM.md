@@ -321,3 +321,19 @@ With this setup:
 - Enable reasoning content separation for reasoning models
 - ngrok service runs automatically on boot
 
+# Run without LM Studio open
+
+### Check models
+```bash
+lms ls
+```
+
+### Load model
+```bash
+lms load mistralai/ministral-3-14b-reasoning --gpu max --context-length 32768 -y
+```
+
+### Start server
+```bash
+lms server start
+```
